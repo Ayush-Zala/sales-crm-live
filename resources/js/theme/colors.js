@@ -1,0 +1,53 @@
+export const matisse = {
+    default: "#0068B4",
+    50: "#f0f8ff",
+    100: "#dff0ff",
+    200: "#b9e1fe",
+    300: "#7bcbfe",
+    400: "#34b0fc",
+    500: "#0a98ed",
+    600: "#0077cb",
+    700: "#0068b4",
+    800: "#055187",
+    900: "#0a4370",
+    950: "#072a4a",
+};
+
+export const trinidad = {
+    default: "#e94d13",
+    50: "#fef6ee",
+    100: "#feead6",
+    200: "#fcd1ac",
+    300: "#f9b178",
+    400: "#f58642",
+    500: "#f2651d",
+    600: "#e94d13",
+    700: "#bd3711",
+    800: "#962d16",
+    900: "#792815",
+    950: "#411109",
+};
+
+// Graph colors
+export const graphColors = {
+    orange: "#f2651d",
+    violet: "#be1df7",
+    pink: "#f71dd9",
+    camelYellow: "#ce943f",
+    lightBlue: "#00B3E6",
+    lightOrange: "#fb9027",
+    blue: "#2b2e9d",
+    darkPink: "#f20e58",
+    greenGrey: "#3f6152",
+    lightRed: "#FF3333",
+    brown: "#411109",
+    lightPurple: "#3a1c68",
+    lightGrey: "#666666",
+    darkCream: "#B34D4D",
+    lightBrown: "#ce7c3f",
+    cherryRed: "#e81f1f",
+    darkBlue: "#0a4370",
+    lightGreen: "#00b33c",
+    darkGreen: "#3f6152",
+    lightOrange: "#fb9027",
+};

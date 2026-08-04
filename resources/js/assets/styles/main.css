@@ -1,0 +1,6 @@
+.css-1a2o1u-MuiButtonBase-root-MuiButton-root.Pagination-activeButton {
+  cursor: not-allowed !important;
+  border: 1px solid #dff0ff !important;
+  background-color: #f0f8ff !important;
+  color: #0068b4 !important;
+}
