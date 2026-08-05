@@ -109,15 +109,19 @@ class DashboardController extends Controller
 
                 $reportData = $this->getReportDataManager($managersList);
 
-                foreach ($userdetail as $key => $val) {
-                    $targets = Target::select('users.name as name', 'targets.*')
-                        ->join('users', 'users.id', '=', 'targets.user_id')
-                        ->where('time', strtoupper(date('M-Y')))
-                        ->where('targets.user_id', $val->userid)
-                        ->get();
+                $existingUserIds = $userdetail->pluck('userid')->toArray();
+                $monthTargets = Target::select('users.name as name', 'targets.*')
+                    ->join('users', 'users.id', '=', 'targets.user_id')
+                    ->where('time', strtoupper(date('M-Y')))
+                    ->whereIn('targets.user_id', $existingUserIds)
+                    ->get()
+                    ->keyBy('user_id');
 
-                    if ($targets->isEmpty()) {
-                        $targets[] = [
+                foreach ($userdetail as $val) {
+                    if ($monthTargets->has($val->userid)) {
+                        $allTargets[] = $monthTargets->get($val->userid)->toArray();
+                    } else {
+                        $allTargets[] = [
                             'user_id' => $val->userid,
                             'name' => $val->username,
                             'target_achieved' => 0,
@@ -125,39 +129,36 @@ class DashboardController extends Controller
                             'time' => strtoupper(Carbon::now()->format('M-Y')),
                         ];
                     }
-
-                    // Add the user's targets to the allTargets array
-                    $allTargets = array_merge($allTargets, $targets->toArray());
-
-                    $today = Carbon::today()->toDateString();
-                    $last_7_days = Carbon::today()->subDays(7)->toDateString();
-
-                    $events = Calendar::select(
-                        "calendars.id as id",
-                        "calendars.title as title",
-                        "calendars.start_date as start_date",
-                        "calendars.end_date as end_date",
-                        "calendars.description as description",
-                        "calendars.repeat_rule as repeat_rule",
-                        "calendars.all_day as all_day",
-                        "calendars.timezone as timezone",
-                        "calendars.company_id as company_id",
-                        "users.name as user_name",
-                        "users.id as userid",
-                        'companies.name as company_name',
-                    )
-                        ->join('users', 'users.id', '=', 'calendars.created_by')
-                        ->join('companies', 'companies.id', '=', 'calendars.company_id')
-                        ->where(function ($query) use ($today, $last_7_days) {
-                            $query->whereBetween('calendars.start_date', [$today, $last_7_days])
-                                ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
-                                ->orWhere(function ($query) use ($today, $last_7_days) {
-                                    $query->where('calendars.start_date', '<=', $today)
-                                        ->where('calendars.end_date', '>=', $last_7_days);
-                                });
-                        })
-                        ->get();
                 }
+
+                $today = Carbon::today()->toDateString();
+                $last_7_days = Carbon::today()->subDays(7)->toDateString();
+
+                $events = Calendar::select(
+                    "calendars.id as id",
+                    "calendars.title as title",
+                    "calendars.start_date as start_date",
+                    "calendars.end_date as end_date",
+                    "calendars.description as description",
+                    "calendars.repeat_rule as repeat_rule",
+                    "calendars.all_day as all_day",
+                    "calendars.timezone as timezone",
+                    "calendars.company_id as company_id",
+                    "users.name as user_name",
+                    "users.id as userid",
+                    'companies.name as company_name',
+                )
+                    ->join('users', 'users.id', '=', 'calendars.created_by')
+                    ->join('companies', 'companies.id', '=', 'calendars.company_id')
+                    ->where(function ($query) use ($today, $last_7_days) {
+                        $query->whereBetween('calendars.start_date', [$today, $last_7_days])
+                            ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
+                            ->orWhere(function ($query) use ($today, $last_7_days) {
+                                $query->where('calendars.start_date', '<=', $today)
+                                    ->where('calendars.end_date', '>=', $last_7_days);
+                            });
+                    })
+                    ->get();
             } else {
                 $userdetail = User::select('users.id as userid', 'users.name as username')
                     ->join('model_has_roles', 'model_has_roles.model_id', '=', 'users.id')
@@ -249,15 +250,20 @@ class DashboardController extends Controller
 
                 $reportData = $this->getReportDataManager($managersList);
 
-                foreach ($userdetail as $key => $val) {
-                    $targets = Target::select('users.name as name', 'targets.*')
-                        ->join('users', 'users.id', '=', 'targets.user_id')
-                        ->where('time', strtoupper(date('M-Y')))
-                        ->where('targets.user_id', $val->userid)
-                        ->get();
+                $existingUserIds = $userdetail->pluck('userid')->toArray();
+                $monthTargets = Target::select('users.name as name', 'targets.*')
+                    ->join('users', 'users.id', '=', 'targets.user_id')
+                    ->where('time', strtoupper(date('M-Y')))
+                    ->whereIn('targets.user_id', $existingUserIds)
+                    ->get()
+                    ->keyBy('user_id');
 
-                    if ($targets->isEmpty()) {
-                        $targets[] = [
+                $allTargets = [];
+                foreach ($userdetail as $val) {
+                    if ($monthTargets->has($val->userid)) {
+                        $allTargets[] = $monthTargets->get($val->userid)->toArray();
+                    } else {
+                        $allTargets[] = [
                             'user_id' => $val->userid,
                             'name' => $val->username,
                             'target_achieved' => 0,
@@ -265,41 +271,37 @@ class DashboardController extends Controller
                             'time' => strtoupper(Carbon::now()->format('M-Y')),
                         ];
                     }
-
-                    // Add the user's targets to the allTargets array
-                    $allTargets = [];
-                    $allTargets = array_merge($allTargets, $targets->toArray());
-
-                    $today = Carbon::today()->toDateString();
-                    $last_7_days = Carbon::today()->subDays(7)->toDateString();
-
-                    $events = Calendar::select(
-                        "calendars.id as id",
-                        "calendars.title as title",
-                        "calendars.start_date as start_date",
-                        "calendars.end_date as end_date",
-                        "calendars.description as description",
-                        "calendars.repeat_rule as repeat_rule",
-                        "calendars.all_day as all_day",
-                        "calendars.timezone as timezone",
-                        "calendars.company_id as company_id",
-                        "users.name as user_name",
-                        "users.id as userid",
-                        'companies.name as company_name',
-                    )
-                        ->join('users', 'users.id', '=', 'calendars.created_by')
-                        ->join('companies', 'companies.id', '=', 'calendars.company_id')
-                        ->where('users.reporting_authority_id', Auth::id())
-                        ->where(function ($query) use ($today, $last_7_days) {
-                            $query->whereBetween('calendars.start_date', [$today, $last_7_days])
-                                ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
-                                ->orWhere(function ($query) use ($today, $last_7_days) {
-                                    $query->where('calendars.start_date', '<=', $today)
-                                        ->where('calendars.end_date', '>=', $last_7_days);
-                                });
-                        })
-                        ->get();
                 }
+
+                $today = Carbon::today()->toDateString();
+                $last_7_days = Carbon::today()->subDays(7)->toDateString();
+
+                $events = Calendar::select(
+                    "calendars.id as id",
+                    "calendars.title as title",
+                    "calendars.start_date as start_date",
+                    "calendars.end_date as end_date",
+                    "calendars.description as description",
+                    "calendars.repeat_rule as repeat_rule",
+                    "calendars.all_day as all_day",
+                    "calendars.timezone as timezone",
+                    "calendars.company_id as company_id",
+                    "users.name as user_name",
+                    "users.id as userid",
+                    'companies.name as company_name',
+                )
+                    ->join('users', 'users.id', '=', 'calendars.created_by')
+                    ->join('companies', 'companies.id', '=', 'calendars.company_id')
+                    ->where('users.reporting_authority_id', Auth::id())
+                    ->where(function ($query) use ($today, $last_7_days) {
+                        $query->whereBetween('calendars.start_date', [$today, $last_7_days])
+                            ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
+                            ->orWhere(function ($query) use ($today, $last_7_days) {
+                                $query->where('calendars.start_date', '<=', $today)
+                                    ->where('calendars.end_date', '>=', $last_7_days);
+                            });
+                    })
+                    ->get();
             }
 
             $detail['name'] = Auth::user()->name;
@@ -484,102 +486,67 @@ class DashboardController extends Controller
     public function getReportDataManager($managersList)
     {
         $team = [];
-        foreach ($managersList as $key => $manager) {
-            $teamlist = User::select('id', 'name')->where('reporting_authority_id', $manager->reporting_authority_id)->where('is_active', 1)->get();
-            foreach ($teamlist as $val) {
-                // get report data from userid and duration from disposition, disposition_status and users database tables according to the disposition status
+        $managerIds = collect($managersList)->pluck('reporting_authority_id')->filter()->toArray();
+        if (empty($managerIds)) return [];
+
+        $allTeamMembers = User::select('id', 'name', 'reporting_authority_id')
+            ->whereIn('reporting_authority_id', $managerIds)
+            ->where('is_active', 1)
+            ->get();
+            
+        $userIds = $allTeamMembers->pluck('id')->toArray();
+        if (empty($userIds)) return [];
+
+        $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
+
+        $dispoCounts = Disposition::whereIn('user_id', $userIds)
+            ->groupBy('user_id')
+            ->select('user_id', DB::raw('COUNT(*) as total'))
+            ->pluck('total', 'user_id');
+
+        $dispoSalesCounts = Disposition::whereIn('user_id', $userIds)
+            ->where('status_id', $saleStatusId)
+            ->groupBy('user_id')
+            ->select('user_id', DB::raw('COUNT(*) as total'))
+            ->pluck('total', 'user_id');
+
+        $zoomCounts = CallLog::whereIn('user_id', $userIds)
+            ->groupBy('user_id')
+            ->select('user_id', DB::raw('COUNT(DISTINCT caller_number) as total'))
+            ->pluck('total', 'user_id');
+
+        // Group members by manager
+        $membersByManager = $allTeamMembers->groupBy('reporting_authority_id');
+
+        foreach ($managersList as $manager) {
+            $managerTeam = $membersByManager->get($manager->reporting_authority_id, collect([]));
+            $salesexe = [];
+            
+            foreach ($managerTeam as $val) {
                 $userid = $val->id;
-                //  $duration = $request->duration;
-                $duration = 'life';
-                $dispostatus = DispositionStatus::select('id', 'name')->get();
-
-                $total = 0;
-                $totsale = 0;
-
-                // get zoom calls from method of getZoomCalls from zoom controller
-                $zoomController = new \App\Http\Controllers\ZoomController();
-                $zoomAndCRMCalls = $zoomController->getZoomAndCRMCalls($userid);
-
-                foreach ($dispostatus as $dispo) {
-                    if ($duration == 'life') {
-                        $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                            ->where('status_id', $dispo->id)->count();
-
-                        $total += $detailarr[$dispo->name];
-
-                        if ($dispo->name == 'Sale') {
-                            $totsale += $detailarr[$dispo->name];
-                        }
-
-                        $detailarr['Total'] = $total;
-                        $detailarr['Total_Sale'] = $totsale;
-                    } elseif ($duration == 'today') {
-                        $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                            ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . date("Y-m-d") . '%')
-                            ->count();
-
-                        $total += $detailarr[$dispo->name];
-                        if ($dispo->name == 'Sale') {
-                            $totsale += $detailarr[$dispo->name];
-                        }
-
-                        $detailarr['Total_Sale'] = $totsale;
-                        $detailarr['Total'] = $total;
-                    } elseif ($duration == 'yesterday') {
-                        $yesterday = date("Y-m-d", strtotime("-1 days"));
-                        $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                            ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . $yesterday . '%')
-                            ->count();
-
-                        $total += $detailarr[$dispo->name];
-                        // $total += $detailarr[$dispo->name];
-                        if ($dispo->name == 'Sale') {
-                            $totsale += $detailarr[$dispo->name];
-                        }
-
-                        $detailarr['Total_Sale'] = $totsale;
-
-                        $detailarr['Total'] = $total;
-                    } elseif ($duration == 'last_7_day') {
-                        $weekday = date("Y-m-d", strtotime("-7 days"));
-                        $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                            ->where('status_id', $dispo->id)->where([['updated_at', '>=', $weekday], ['updated_at', '<=', date("Y-m-d")]])
-                            ->count();
-
-                        $total += $detailarr[$dispo->name];
-
-                        //  $total += $detailarr[$dispo->name];
-                        if ($dispo->name == 'Sale') {
-                            $totsale += $detailarr[$dispo->name];
-                        }
-
-                        $detailarr['Total_Sale'] = $totsale;
-
-                        $detailarr['Total'] = $total;
-                    } elseif ($duration == 'last_30_day') {
-                        $monthday = date("Y-m-d", strtotime("-30 days"));
-                        $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                            ->where('status_id', $dispo->id)->where([['updated_at', '>=', $monthday], ['updated_at', '<=', date("Y-m-d")]])
-                            ->count();
-
-                        $total += $detailarr[$dispo->name];
-
-                        $detailarr['Total'] = $total;
-                        if ($dispo->name == 'Sale') {
-                            $totsale += $detailarr[$dispo->name];
-                        }
-
-                        $detailarr['Total_Sale'] = $totsale;
-                    }
-                }
-                $salesexe[] = ['name' => $val->name, 'id' => $val->id, 'totalCall' => ($total + $zoomAndCRMCalls['zoom_api']), 'totalSales' => $totsale, 'zoomCalls' => $zoomAndCRMCalls['zoom_api'], 'crmCalls' => $zoomAndCRMCalls['call_salecrm']];
+                
+                $salecrmtotal = $dispoCounts->get($userid, 0);
+                $totalSales = $dispoSalesCounts->get($userid, 0);
+                $uniqueZoomCalls = $zoomCounts->get($userid, 0);
+                
+                $zoomtotal = abs($salecrmtotal - $uniqueZoomCalls);
+                
+                $salesexe[] = [
+                    'name' => $val->name, 
+                    'id' => $val->id, 
+                    'totalCall' => ($zoomtotal + $salecrmtotal), 
+                    'totalSales' => $totalSales,
+                    'zoomCalls' => $zoomtotal, 
+                    'crmCalls' => $salecrmtotal
+                ];
             }
+            
+            $managerName = isset($manager->manager_name) ? $manager->manager_name : (isset($manager->name) ? $manager->name : 'Unknown');
             $team['manager'][] = [
-                'name' => $manager->manager_name,
+                'name' => $managerName,
                 'id' => $manager->reporting_authority_id,
                 'team' => $salesexe
             ];
-            $salesexe = [];
         }
 
         return $team;
@@ -671,367 +638,72 @@ class DashboardController extends Controller
 
     public function getReportDataManagers(Request $request)
     {
-        $team = [];
-        //foreach ($managersList as $key => $manager) {
-        $teamlist = User::select('id', 'name')->where('reporting_authority_id', $request->userid)->where('is_active', 1)->get();
-
-        foreach ($teamlist as $val) {
-            // get report data from userid and duration from disposition, disposition_status and users database tables according to the disposition status
-            $userid = $val->id;
-            $duration = $request->duration;
-            // $duration = 'life';
-            $dispostatus = DispositionStatus::select('id', 'name')->get();
-
-            $total = 0;
-            $zoomtotal = 0;
-            $salecrmtotal = 0;
-            $totalSales = 0;
-            $cleanedNumbersArray = 0;
-            $cleanedNumbersArray2 = 0;
-
-
-            foreach ($dispostatus as $dispo) {
-                if ($duration == 'life') {
-                    $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                        ->where('status_id', $dispo->id)->count();
-
-                    $total += $detailarr[$dispo->name];
-
-                    ////////////////////////////////////////////
-
-                    $sel = CallLog::select('caller_number')->where('user_id', $userid)->pluck('caller_number');
-                    $zoomnumber = array_unique($sel->toArray());
-
-                    $disposition_new = Disposition::select('phone')->where('user_id', $userid)->pluck('phone')->toArray();
-
-                    $cleanedNumbers = array_map(function ($number) {
-                        $number11 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number11);
-                    }, $zoomnumber);
-
-                    // If you need to convert to an array
-                    $cleanedNumbersArray = $cleanedNumbers;
-
-                    $cleanedNumbers2 = array_map(function ($number) {
-                        $number112 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number112);
-                    }, $disposition_new);
-
-                    // If you need to convert to an array
-                    $cleanedNumbersArray2 = $cleanedNumbers2;
-                    $salecrmtotal = count($disposition_new);
-                    if ((count($disposition_new)) > (count($cleanedNumbersArray))) {
-
-                        $zoomtotal = count($disposition_new) - count(value: $cleanedNumbersArray);
-                    } else {
-
-                        $zoomtotal = count($cleanedNumbersArray) - count(value: $disposition_new);
-                    }
-                    if ($salecrmtotal < 0) {
-                        $salecrmtotal = 0;
-                    }
-                    if ($zoomtotal < 0) {
-                        $zoomtotal = 0;
-                    }
-                    /////////////////////////////////////////
-
-                    // $detailarr['Total'] = $total;
-                    $detailarr['Total'] = $zoomtotal + $salecrmtotal;
-
-                    // //////////////
-
-                    $totalSales = Disposition::where('user_id', $val)
-                        ->join('disposition_statuses', 'dispositions.status_id', '=', 'disposition_statuses.id')
-                        ->where('disposition_statuses.name', 'Sale')
-                        ->count();
-
-
-                    $detailarr['Total_Sale'] = $totalSales;
-
-                } elseif ($duration == 'today') {
-                    $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                        ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . date("Y-m-d") . '%')
-                        ->count();
-
-                    $total += $detailarr[$dispo->name];
-
-                    ////////////////////////////////////////////
-
-                    $sel = CallLog::select('caller_number')->where('user_id', $userid)
-                        ->Where('start_time', 'like', '%' . date("Y-m-d") . '%')->pluck('caller_number');
-                    $zoomnumber = array_unique($sel->toArray());
-
-                    $disposition_new = Disposition::select('phone')->where('user_id', $userid)->Where('updated_at', 'like', '%' . date("Y-m-d") . '%')->pluck('phone')->toArray();
-
-                    $cleanedNumbers = array_map(function ($number) {
-                        $number11 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number11);
-                    }, $zoomnumber);
-
-                    // If you need to convert to an array
-                    $cleanedNumbersArray = $cleanedNumbers;
-
-                    $cleanedNumbers2 = array_map(function ($number) {
-                        $number112 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number112);
-                    }, $disposition_new);
-
-                    // If you need to convert to an array
-                    // $cleanedNumbersArray2 = $cleanedNumbers2;
-                    // $zoomtotal += count($cleanedNumbersArray);
-                    // $salecrmtotal += count($cleanedNumbersArray2);
-
-
-
-                    $cleanedNumbersArray2 = $cleanedNumbers2;
-                    $salecrmtotal = count($disposition_new);
-                    if ((count($disposition_new)) > (count($cleanedNumbersArray))) {
-
-                        $zoomtotal = count($disposition_new) - count(value: $cleanedNumbersArray);
-                    } else {
-
-                        $zoomtotal = count($cleanedNumbersArray) - count(value: $disposition_new);
-                    }
-                    if ($salecrmtotal < 0) {
-                        $salecrmtotal = 0;
-                    }
-                    if ($zoomtotal < 0) {
-                        $zoomtotal = 0;
-                    }
-
-
-                    $detailarr['Total'] = $zoomtotal + $salecrmtotal;
-                    /////////////////////////////////////////
-
-                    // //////////////
-
-                    $totalSales = Disposition::where('user_id', $val)
-                        ->join('disposition_statuses', 'dispositions.status_id', '=', 'disposition_statuses.id')
-                        ->where('disposition_statuses.name', 'Sale')
-                        ->where('dispositions.updated_at', 'like', '%' . date("Y-m-d") . '%')
-                        ->count();
-
-                    $detailarr['Total_Sale'] = $totalSales;
-
-                } elseif ($duration == 'yesterday') {
-                    $yesterday = date("Y-m-d", strtotime("-1 days"));
-                    $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                        ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . $yesterday . '%')
-                        ->count();
-
-                    $total += $detailarr[$dispo->name];
-
-                    //   $detailarr['Total'] = $total;
-
-                    ////////////////////////////////////////////
-
-
-                    $sel = CallLog::select('caller_number')->where('user_id', $userid)
-                        ->Where('start_time', 'like', '%' . $yesterday . '%')->pluck('caller_number');
-                    $zoomnumber = array_unique($sel->toArray());
-
-                    $disposition_new = Disposition::select('phone')->where('user_id', $userid)->Where('updated_at', 'like', '%' . $yesterday . '%')->pluck('phone')->toArray();
-                    $cleanedNumbers = array_map(function ($number) {
-
-
-                        $number11 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number11);
-                    }, $zoomnumber);
-
-                    // If you need to convert to an array
-                    $cleanedNumbersArray = $cleanedNumbers;
-
-                    $cleanedNumbers2 = array_map(function ($number) {
-                        $number112 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number112);
-                    }, $disposition_new);
-
-                    // If you need to convert to an array
-                    // $cleanedNumbersArray2 = $cleanedNumbers2;
-                    // $zoomtotal += count($cleanedNumbersArray);
-                    // $salecrmtotal += count($cleanedNumbersArray2);
-
-                    $cleanedNumbersArray2 = $cleanedNumbers2;
-                    $salecrmtotal = count($disposition_new);
-                    if ((count($disposition_new)) > (count($cleanedNumbersArray))) {
-
-                        $zoomtotal = count($disposition_new) - count(value: $cleanedNumbersArray);
-                    } else {
-
-                        $zoomtotal = count($cleanedNumbersArray) - count(value: $disposition_new);
-                    }
-                    if ($salecrmtotal < 0) {
-                        $salecrmtotal = 0;
-                    }
-                    if ($zoomtotal < 0) {
-                        $zoomtotal = 0;
-                    }
-
-
-                    $detailarr['Total'] = $zoomtotal + $salecrmtotal;
-                    /////////////////////////////////////////
-
-                    // //////////////
-
-                    $totalSales = Disposition::where('user_id', $val)
-                        ->join('disposition_statuses', 'dispositions.status_id', '=', 'disposition_statuses.id')
-                        ->where('disposition_statuses.name', 'Sale')
-                        ->where('dispositions.updated_at', 'like', '%' . $yesterday . '%')
-                        ->count();
-
-                    $detailarr['Total_Sale'] = $totalSales;
-                } elseif ($duration == 'last_7_day') {
-                    $weekday = date("Y-m-d", strtotime("-7 days"));
-                    $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                        ->where('status_id', $dispo->id)->where([['updated_at', '>=', $weekday], ['updated_at', '<=', date("Y-m-d")]])
-                        ->count();
-
-                    $total += $detailarr[$dispo->name];
-
-                    // $detailarr['Total'] = $total;
-
-
-
-
-                    ////////////////////////////////////////////
-
-
-                    $sel = CallLog::select('caller_number')->where('user_id', $userid)
-                        ->where([['start_time', '>=', $weekday], ['start_time', '<=', date("Y-m-d")]])->pluck('caller_number');
-                    $zoomnumber = array_unique($sel->toArray());
-
-                    $disposition_new = Disposition::select('phone')->where('user_id', $userid)->where([['updated_at', '>=', $weekday], ['updated_at', '<=', date("Y-m-d")]])->pluck('phone')->toArray();
-                    $cleanedNumbers = array_map(function ($number) {
-                        $number11 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number11);
-                    }, $zoomnumber);
-
-                    // If you need to convert to an array
-                    $cleanedNumbersArray = $cleanedNumbers;
-
-                    $cleanedNumbers2 = array_map(function ($number) {
-                        $number112 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number112);
-                    }, $disposition_new);
-
-                    // If you need to convert to an array
-                    // $cleanedNumbersArray2 = $cleanedNumbers2;
-                    // $zoomtotal += count($cleanedNumbersArray);
-                    // $salecrmtotal += count($cleanedNumbersArray2);
-
-
-                    $cleanedNumbersArray2 = $cleanedNumbers2;
-                    $salecrmtotal = count($disposition_new);
-                    if ((count($disposition_new)) > (count($cleanedNumbersArray))) {
-
-                        $zoomtotal = count($disposition_new) - count(value: $cleanedNumbersArray);
-                    } else {
-
-                        $zoomtotal = count($cleanedNumbersArray) - count(value: $disposition_new);
-                    }
-                    if ($salecrmtotal < 0) {
-                        $salecrmtotal = 0;
-                    }
-                    if ($zoomtotal < 0) {
-                        $zoomtotal = 0;
-                    }
-
-                    $detailarr['Total'] = $zoomtotal + $salecrmtotal;
-                    /////////////////////////////////////////
-
-                    // //////////////
-
-                    $totalSales = Disposition::where('user_id', $val)
-                        ->join('disposition_statuses', 'dispositions.status_id', '=', 'disposition_statuses.id')
-                        ->where('disposition_statuses.name', 'Sale')
-                        ->where('dispositions.updated_at', '>=', $weekday)
-                        ->where('dispositions.updated_at', '<=', date("Y-m-d"))
-                        ->count();
-
-                    $detailarr['Total_Sale'] = $totalSales;
-
-
-                } elseif ($duration == 'last_30_day') {
-                    $monthday = date("Y-m-d", strtotime("-30 days"));
-                    $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                        ->where('status_id', $dispo->id)->where([['updated_at', '>=', $monthday], ['updated_at', '<=', date("Y-m-d")]])
-                        ->count();
-
-                    $total += $detailarr[$dispo->name];
-
-
-
-
-                    ////////////////////////////////////////////
-
-
-                    $sel = CallLog::select('caller_number')->where('user_id', $userid)
-                        ->where([['start_time', '>=', $monthday], ['start_time', '<=', date("Y-m-d")]])->pluck('caller_number');
-                    $zoomnumber = array_unique($sel->toArray());
-
-                    $disposition_new = Disposition::select('phone')->where('user_id', $userid)->where([['updated_at', '>=', $monthday], ['updated_at', '<=', date("Y-m-d")]])->pluck('phone')->toArray();
-                    $cleanedNumbers = array_map(function ($number) {
-
-
-                        $number11 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number11);
-                    }, $zoomnumber);
-
-                    // If you need to convert to an array
-                    $cleanedNumbersArray = $cleanedNumbers;
-
-                    $cleanedNumbers2 = array_map(function ($number) {
-
-
-                        $number112 = str_replace("+1", "", $number);
-                        return preg_replace('/[^0-9]/', '', $number112);
-                    }, $disposition_new);
-
-                    // If you need to convert to an array
-                    // $cleanedNumbersArray2 = $cleanedNumbers2;
-                    // $zoomtotal += count($cleanedNumbersArray);
-                    // $salecrmtotal += count($cleanedNumbersArray2);
-
-
-                    $cleanedNumbersArray2 = $cleanedNumbers2;
-                    $salecrmtotal = count($disposition_new);
-                    if ((count($disposition_new)) > (count($cleanedNumbersArray))) {
-
-                        $zoomtotal = count($disposition_new) - count(value: $cleanedNumbersArray);
-                    } else {
-
-                        $zoomtotal = count($cleanedNumbersArray) - count(value: $disposition_new);
-                    }
-                    if ($salecrmtotal < 0) {
-                        $salecrmtotal = 0;
-                    }
-                    if ($zoomtotal < 0) {
-                        $zoomtotal = 0;
-                    }
-                    $detailarr['Total'] = $zoomtotal + $salecrmtotal;
-                    /////////////////////////////////////////
-
-                    // //////////////
-
-                    $totalSales = Disposition::where('user_id', $val)
-                        ->join('disposition_statuses', 'dispositions.status_id', '=', 'disposition_statuses.id')
-                        ->where('disposition_statuses.name', 'Sale')
-                        ->where('dispositions.updated_at', '>=', $monthday)
-                        ->where('dispositions.updated_at', '<=', date("Y-m-d"))
-                        ->count();
-
-                    $detailarr['Total_Sale'] = $totalSales;
-
-                }
-            }
-            $salesexe[] = ['name' => $val->name, 'id' => $val->id, 'totalCall' => ($zoomtotal + $salecrmtotal), 'zoomCalls' => $zoomtotal, 'crmCalls' => $salecrmtotal, 'totalSales' => $totalSales];
-
-            //                $team['manager'][$manager->manager_name][$manager->reporting_authority_id][] = ['user_id' => $val->id, 'name' => $val->name, 'reportData' => $detailarr];
+        $managerId = $request->userid;
+        $teamlist = User::select('id', 'name')->where('reporting_authority_id', $managerId)->where('is_active', 1)->get();
+        $userIds = $teamlist->pluck('id')->toArray();
+        if (empty($userIds)) return response()->json(['reportData' => []]);
+
+        $duration = $request->duration;
+        $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
+
+        $dispositionQuery = Disposition::whereIn('user_id', $userIds);
+        $dispoSalesQuery = Disposition::whereIn('user_id', $userIds)->where('status_id', $saleStatusId);
+        $callLogQuery = CallLog::whereIn('user_id', $userIds);
+
+        if ($duration == 'today') {
+            $dispositionQuery->whereDate('updated_at', Carbon::today());
+            $dispoSalesQuery->whereDate('updated_at', Carbon::today());
+            $callLogQuery->whereDate('start_time', Carbon::today());
+        } elseif ($duration == 'yesterday') {
+            $yesterday = Carbon::yesterday();
+            $dispositionQuery->whereDate('updated_at', $yesterday);
+            $dispoSalesQuery->whereDate('updated_at', $yesterday);
+            $callLogQuery->whereDate('start_time', $yesterday);
+        } elseif ($duration == 'last_7_day') {
+            $weekday = Carbon::today()->subDays(7);
+            $dispositionQuery->where('updated_at', '>=', $weekday);
+            $dispoSalesQuery->where('updated_at', '>=', $weekday);
+            $callLogQuery->where('start_time', '>=', $weekday);
+        } elseif ($duration == 'last_30_day') {
+            $monthday = Carbon::today()->subDays(30);
+            $dispositionQuery->where('updated_at', '>=', $monthday);
+            $dispoSalesQuery->where('updated_at', '>=', $monthday);
+            $callLogQuery->where('start_time', '>=', $monthday);
         }
-        $users = User::find($request->userid);
+
+        $dispoCounts = $dispositionQuery->groupBy('user_id')
+            ->select('user_id', DB::raw('COUNT(*) as total'))->pluck('total', 'user_id');
+            
+        $dispoSalesCounts = $dispoSalesQuery->groupBy('user_id')
+            ->select('user_id', DB::raw('COUNT(*) as total'))->pluck('total', 'user_id');
+
+        $zoomCounts = $callLogQuery->groupBy('user_id')
+            ->select('user_id', DB::raw('COUNT(DISTINCT caller_number) as total'))->pluck('total', 'user_id');
+
+        $salesexe = [];
+        foreach ($teamlist as $val) {
+            $userid = $val->id;
+            
+            $salecrmtotal = $dispoCounts->get($userid, 0);
+            $totalSales = $dispoSalesCounts->get($userid, 0);
+            $uniqueZoomCalls = $zoomCounts->get($userid, 0);
+            
+            $zoomtotal = abs($salecrmtotal - $uniqueZoomCalls);
+            
+            $salesexe[] = [
+                'name' => $val->name, 
+                'id' => $val->id, 
+                'totalCall' => ($zoomtotal + $salecrmtotal), 
+                'zoomCalls' => $zoomtotal, 
+                'crmCalls' => $salecrmtotal, 
+                'totalSales' => $totalSales
+            ];
+        }
+
+        $manager = User::find($managerId);
         $team['manager'][] = [
-            'name' => $users->name,
-            'id' => $request->userid,
+            'name' => $manager ? $manager->name : 'Unknown',
+            'id' => $managerId,
             'team' => $salesexe
         ];
 
