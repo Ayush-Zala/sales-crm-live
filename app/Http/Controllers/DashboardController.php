@@ -196,7 +196,7 @@ class DashboardController extends Controller
                 $totalassign = AssignCompanies::distinct('company_id')
                     ->where("is_active", 1)
                     ->count();
-                $unassign = Company::count() - $totalassign;
+                $unassign = max(0, \App\Models\Client::count() - $totalassign);
 
                 $managersList = User::select('reporting_authority_id', DB::raw('(SELECT name FROM users as managers WHERE managers.id = users.reporting_authority_id) as manager_name'))
                     ->distinct()
@@ -336,7 +336,7 @@ class DashboardController extends Controller
                     ->where('assign_by', $id)
                     ->where("is_active", 1)
                     ->count();
-                $unassign = Company::count() - $totalassign;
+                $unassign = max(0, \App\Models\Client::count() - $totalassign);
 
                 $managersList = User::select('users.reporting_authority_id', 'managers.name as manager_name')
                     ->join('users as managers', 'managers.id', '=', 'users.reporting_authority_id')
