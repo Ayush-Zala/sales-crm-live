@@ -24,6 +24,100 @@ use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
+    private function getDateRangeForFilter($filter, $request)
+    {
+        $currentStart = Carbon::now()->startOfMonth();
+        $currentEnd = Carbon::now()->endOfMonth();
+        $prevStart = null;
+        $prevEnd = null;
+
+        if ($filter == 'today') {
+            $currentStart = Carbon::today();
+            $currentEnd = Carbon::today()->endOfDay();
+            $prevStart = Carbon::yesterday()->startOfDay();
+            $prevEnd = Carbon::yesterday()->endOfDay();
+        } elseif ($filter == 'yesterday') {
+            $currentStart = Carbon::yesterday();
+            $currentEnd = Carbon::yesterday()->endOfDay();
+            $prevStart = Carbon::today()->subDays(2)->startOfDay();
+            $prevEnd = Carbon::today()->subDays(2)->endOfDay();
+        } elseif ($filter == 'last_week') {
+            $currentStart = Carbon::now()->subWeek()->startOfWeek();
+            $currentEnd = Carbon::now()->subWeek()->endOfWeek();
+            $prevStart = Carbon::now()->subWeeks(2)->startOfWeek();
+            $prevEnd = Carbon::now()->subWeeks(2)->endOfWeek();
+        } elseif ($filter == 'this_month') {
+            $currentStart = Carbon::now()->startOfMonth();
+            $currentEnd = Carbon::now()->endOfMonth();
+            $prevStart = Carbon::now()->subMonth()->startOfMonth();
+            $prevEnd = Carbon::now()->subMonth()->endOfMonth();
+        } elseif ($filter == 'life_time') {
+            $earliestRecord = Disposition::min('updated_at');
+            $currentStart = $earliestRecord ? Carbon::parse($earliestRecord) : Carbon::today();
+            $currentEnd = Carbon::now()->endOfDay();
+            $prevStart = null;
+            $prevEnd = null;
+        } elseif ($filter == 'custom') {
+            $currentStart = $request->startDateFilter ? Carbon::parse($request->startDateFilter)->startOfDay() : Carbon::now()->startOfMonth();
+            $currentEnd = $request->endDateFilter ? Carbon::parse($request->endDateFilter)->endOfDay() : Carbon::now()->endOfMonth();
+            $diffInDays = $currentStart->diffInDays($currentEnd) + 1;
+            $prevStart = $currentStart->copy()->subDays($diffInDays)->startOfDay();
+            $prevEnd = $currentStart->copy()->subDays(1)->endOfDay();
+        } else {
+            $prevStart = Carbon::now()->subMonth()->startOfMonth();
+            $prevEnd = Carbon::now()->subMonth()->endOfMonth();
+        }
+
+        return [$currentStart, $currentEnd, $prevStart, $prevEnd];
+    }
+
+    private function getAnalyticsDateRangeForFilter($filter, $request)
+    {
+        $currentStart = Carbon::now()->startOfMonth();
+        $currentEnd = Carbon::now()->endOfMonth();
+        $prevStart = null;
+        $prevEnd = null;
+
+        if ($filter == 'today') {
+            $currentStart = Carbon::today();
+            $currentEnd = Carbon::today()->endOfDay();
+            $prevStart = Carbon::yesterday()->startOfDay();
+            $prevEnd = Carbon::yesterday()->endOfDay();
+        } elseif ($filter == 'yesterday') {
+            $currentStart = Carbon::yesterday();
+            $currentEnd = Carbon::yesterday()->endOfDay();
+            $prevStart = Carbon::today()->subDays(2)->startOfDay();
+            $prevEnd = Carbon::today()->subDays(2)->endOfDay();
+        } elseif ($filter == 'last_week') {
+            $currentStart = Carbon::now()->subWeek()->startOfWeek();
+            $currentEnd = Carbon::now()->subWeek()->endOfWeek();
+            $prevStart = Carbon::now()->subWeeks(2)->startOfWeek();
+            $prevEnd = Carbon::now()->subWeeks(2)->endOfWeek();
+        } elseif ($filter == 'this_month') {
+            $currentStart = Carbon::now()->startOfMonth();
+            $currentEnd = Carbon::now()->endOfMonth();
+            $prevStart = Carbon::now()->subMonth()->startOfMonth();
+            $prevEnd = Carbon::now()->subMonth()->endOfMonth();
+        } elseif ($filter == 'life_time') {
+            $earliestRecord = Disposition::min('updated_at');
+            $currentStart = $earliestRecord ? Carbon::parse($earliestRecord) : Carbon::today();
+            $currentEnd = Carbon::now()->endOfDay();
+            $prevStart = null;
+            $prevEnd = null;
+        } elseif ($filter == 'custom') {
+            $currentStart = $request->analytics_start ? Carbon::parse($request->analytics_start)->startOfDay() : Carbon::now()->startOfMonth();
+            $currentEnd = $request->analytics_end ? Carbon::parse($request->analytics_end)->endOfDay() : Carbon::now()->endOfMonth();
+            $diffInDays = $currentStart->diffInDays($currentEnd) + 1;
+            $prevStart = $currentStart->copy()->subDays($diffInDays)->startOfDay();
+            $prevEnd = $currentStart->copy()->subDays(1)->endOfDay();
+        } else {
+            $prevStart = Carbon::now()->subMonth()->startOfMonth();
+            $prevEnd = Carbon::now()->subMonth()->endOfMonth();
+        }
+
+        return [$currentStart, $currentEnd, $prevStart, $prevEnd];
+    }
+
     public function index(Request $request)
     {
         $id = Auth::id();
@@ -32,6 +126,13 @@ class DashboardController extends Controller
         $events = [];
 
         $filter = $request->filter;
+        
+        if ($filter == 'custom') {
+            $request->merge([
+                'startDateFilter' => $request->startDateFilter ?? '1970-01-01',
+                'endDateFilter' => $request->endDateFilter ?? Carbon::now()->toDateString()
+            ]);
+        }
 
         if (($rolesarr->contains('Admin')) || $rolesarr->contains('Business Development Manager')) {
             if ($rolesarr->contains('Admin')) {
@@ -58,28 +159,29 @@ class DashboardController extends Controller
 
                 if ($filter == 'today') {
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->where('updated_at', 'like', '%' . date("Y-m-d") . '%')
+                        ->whereBetween('updated_at', [Carbon::today(), Carbon::today()->endOfDay()])
                         ->count();
                 } elseif ($filter == 'yesterday') {
-                    $yesterday = date("Y-m-d", strtotime("-1 days"));
+                    $yesterdayStart = Carbon::yesterday();
+                    $yesterdayEnd = Carbon::yesterday()->endOfDay();
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->where('updated_at', 'like', '%' . $yesterday . '%')
+                        ->whereBetween('updated_at', [$yesterdayStart, $yesterdayEnd])
                         ->count();
                 } elseif ($filter == 'last_week') {
-                    $weekday = date("Y-m-d", strtotime("-7 days"));
+                    $weekday = Carbon::today()->subDays(7)->startOfDay();
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->where([['updated_at', '>=', $weekday], ['updated_at', '<=', date("Y-m-d")]])
+                        ->whereBetween('updated_at', [$weekday, Carbon::today()->endOfDay()])
                         ->count();
                 } elseif ($filter == 'this_month') {
-                    $monthday = date("Y-m-d", strtotime("-30 days"));
+                    $monthday = Carbon::today()->subDays(30)->startOfDay();
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->where([['updated_at', '>=', $monthday], ['updated_at', '<=', date("Y-m-d")]])
+                        ->whereBetween('updated_at', [$monthday, Carbon::today()->endOfDay()])
                         ->count();
                 } elseif ($filter == 'custom') {
-                    $from = $request->startDateFilter;
-                    $to = $request->endDateFilter;
+                    $from = Carbon::parse($request->startDateFilter)->startOfDay();
+                    $to = Carbon::parse($request->endDateFilter)->endOfDay();
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->where([['updated_at', '>=', $from], ['updated_at', '<=', $to]])
+                        ->whereBetween('updated_at', [$from, $to])
                         ->count();
                 } else {
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)->count();
@@ -322,18 +424,18 @@ class DashboardController extends Controller
 
             $totalcalls = Disposition::where('user_id', $id)->count();
             $calltoday = Disposition::where('user_id', $id)
-                ->Where('updated_at', 'like', '%' . date("Y-m-d") . '%')->count();
+                ->whereBetween('updated_at', [Carbon::today(), Carbon::today()->endOfDay()])->count();
             $totalZoomCalls = CallLog::where('user_id', $id)->count();
 
             $dispostatus = DispositionStatus::select('id', 'name')->get();
 
             foreach ($dispostatus as $dispo) {
                 $detailarr["today"][$dispo->name] = Disposition::where('user_id', $id)
-                    ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . date("Y-m-d") . '%')
+                    ->where('status_id', $dispo->id)->whereBetween('updated_at', [Carbon::today(), Carbon::today()->endOfDay()])
                     ->count();
 
                 $detailarr["yesterday"][$dispo->name] = Disposition::where('user_id', $id)
-                    ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . date("Y-m-d", strtotime("-1 days")) . '%')
+                    ->where('status_id', $dispo->id)->whereBetween('updated_at', [Carbon::yesterday(), Carbon::yesterday()->endOfDay()])
                     ->count();
             }
 
@@ -418,6 +520,254 @@ class DashboardController extends Controller
                 'targets' => $target,
             ];
         }
+
+        $filter = $request->filter ?? 'life_time';
+        list($currentStart, $currentEnd, $prevStart, $prevEnd) = $this->getDateRangeForFilter($filter, $request);
+
+        $analyticsFilter = $request->analytics_filter ?? 'this_month';
+        list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
+
+        $userIdList = isset($userdetail) ? $userdetail->pluck('userid')->toArray() : [$id];
+
+        // 1. Daily Analytics for Area Chart (uses analyticsFilter dates)
+        $dailyDispositions = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+
+        $dailyZoomCalls = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('start_time', [$analyticsStart, $analyticsEnd])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+            
+        $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
+        $dailySales = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
+            ->whereIn('user_id', $userIdList)
+            ->where('status_id', $saleStatusId)
+            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+
+        $analyticsOverview = [];
+        $currentDate = $analyticsStart->copy();
+        $diffDays = $analyticsStart->diffInDays($analyticsEnd);
+        
+        if ($diffDays > 60) {
+            // Group by Month if period > 60 days
+            $currentMonth = $analyticsStart->copy()->startOfMonth();
+            while ($currentMonth <= $analyticsEnd) {
+                $monthStr = $currentMonth->format('Y-m');
+                
+                $crmCalls = 0;
+                $zoomCalls = 0;
+                $salesCount = 0;
+                
+                // Sum daily values for the month
+                $monthEnd = $currentMonth->copy()->endOfMonth();
+                $tempDate = $currentMonth->copy();
+                while ($tempDate <= min($monthEnd, $analyticsEnd)) {
+                    $dateStr = $tempDate->toDateString();
+                    $crmCalls += $dailyDispositions->get($dateStr, 0);
+                    $zoomCalls += $dailyZoomCalls->get($dateStr, 0);
+                    $salesCount += $dailySales->get($dateStr, 0);
+                    $tempDate->addDay();
+                }
+                
+                $analyticsOverview[] = [
+                    'date' => $currentMonth->format('M Y'),
+                    'zoom_calls' => $zoomCalls, 
+                    'crm_calls' => $crmCalls,
+                    'total_calls' => $zoomCalls + $crmCalls,
+                    'sales' => $salesCount
+                ];
+                $currentMonth->addMonth();
+            }
+        } else {
+            // Group by Day
+            while ($currentDate <= min(Carbon::today(), $analyticsEnd)) {
+                $dateStr = $currentDate->toDateString();
+                $crmCalls = $dailyDispositions->get($dateStr, 0);
+                $zoomCalls = $dailyZoomCalls->get($dateStr, 0);
+                
+                $analyticsOverview[] = [
+                    'date' => $currentDate->format('M d'),
+                    'zoom_calls' => $zoomCalls, 
+                    'crm_calls' => $crmCalls,
+                    'total_calls' => $zoomCalls + $crmCalls,
+                    'sales' => $dailySales->get($dateStr, 0)
+                ];
+                $currentDate->addDay();
+            }
+        }
+
+        // Generate independent Sparkline data for Top KPI Cards (using $filter dates)
+        $kpiDailyDispositions = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$currentStart, $currentEnd])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+
+        $kpiDailyZoomCalls = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('start_time', [$currentStart, $currentEnd])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+            
+        $kpiDailySales = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
+            ->whereIn('user_id', $userIdList)
+            ->where('status_id', $saleStatusId)
+            ->whereBetween('updated_at', [$currentStart, $currentEnd])
+            ->groupBy('date')
+            ->pluck('total', 'date');
+
+        $kpiSparklineData = [];
+        $kpiCurrentDate = $currentStart->copy();
+        $kpiDiffDays = $currentStart->diffInDays($currentEnd);
+        
+        if ($kpiDiffDays > 60) {
+            $kpiCurrentMonth = $currentStart->copy()->startOfMonth();
+            while ($kpiCurrentMonth <= $currentEnd) {
+                $crmCalls = 0; $zoomCalls = 0; $salesCount = 0;
+                $monthEnd = $kpiCurrentMonth->copy()->endOfMonth();
+                $tempDate = $kpiCurrentMonth->copy();
+                while ($tempDate <= min($monthEnd, $currentEnd)) {
+                    $dateStr = $tempDate->toDateString();
+                    $crmCalls += $kpiDailyDispositions->get($dateStr, 0);
+                    $zoomCalls += $kpiDailyZoomCalls->get($dateStr, 0);
+                    $salesCount += $kpiDailySales->get($dateStr, 0);
+                    $tempDate->addDay();
+                }
+                
+                $kpiSparklineData[] = [
+                    'date' => $kpiCurrentMonth->format('M Y'),
+                    'total_calls' => $zoomCalls + $crmCalls,
+                    'sales' => $salesCount
+                ];
+                $kpiCurrentMonth->addMonth();
+            }
+        } else {
+            while ($kpiCurrentDate <= min(Carbon::today(), $currentEnd)) {
+                $dateStr = $kpiCurrentDate->toDateString();
+                $crmCalls = $kpiDailyDispositions->get($dateStr, 0);
+                $zoomCalls = $kpiDailyZoomCalls->get($dateStr, 0);
+                
+                $kpiSparklineData[] = [
+                    'date' => $kpiCurrentDate->format('M d'),
+                    'total_calls' => $zoomCalls + $crmCalls,
+                    'sales' => $kpiDailySales->get($dateStr, 0)
+                ];
+                $kpiCurrentDate->addDay();
+            }
+        }
+
+        // 2. Trends for KPI Cards
+        $thisPeriodSales = Disposition::where('status_id', $saleStatusId)
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$currentStart, $currentEnd])
+            ->count();
+        $prevPeriodSales = $prevStart ? Disposition::where('status_id', $saleStatusId)
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$prevStart, $prevEnd])
+            ->count() : 0;
+        $salesTrend = $prevStart ? ($prevPeriodSales > 0 ? round((($thisPeriodSales - $prevPeriodSales) / $prevPeriodSales) * 100, 1) : ($thisPeriodSales > 0 ? 100 : 0)) : null;
+        
+        $thisPeriodZoom = CallLog::whereIn('user_id', $userIdList)
+            ->whereBetween('start_time', [$currentStart, $currentEnd])
+            ->distinct('caller_number')->count();
+        $prevPeriodZoom = $prevStart ? CallLog::whereIn('user_id', $userIdList)
+            ->whereBetween('start_time', [$prevStart, $prevEnd])
+            ->distinct('caller_number')->count() : 0;
+        $zoomTrend = $prevStart ? ($prevPeriodZoom > 0 ? round((($thisPeriodZoom - $prevPeriodZoom) / $prevPeriodZoom) * 100, 1) : ($thisPeriodZoom > 0 ? 100 : 0)) : null;
+
+        $thisPeriodCrm = Disposition::whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$currentStart, $currentEnd])
+            ->count();
+        $prevPeriodCrm = $prevStart ? Disposition::whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$prevStart, $prevEnd])
+            ->count() : 0;
+        
+        $crmTrend = $prevStart ? ($prevPeriodCrm > 0 ? round((($thisPeriodCrm - $prevPeriodCrm) / $prevPeriodCrm) * 100, 1) : ($thisPeriodCrm > 0 ? 100 : 0)) : null;
+        
+        $thisPeriodTotalCalls = $thisPeriodZoom + $thisPeriodCrm;
+        $prevPeriodTotalCalls = $prevPeriodZoom + $prevPeriodCrm;
+        $totalCallsTrend = $prevStart ? ($prevPeriodTotalCalls > 0 ? round((($thisPeriodTotalCalls - $prevPeriodTotalCalls) / $prevPeriodTotalCalls) * 100, 1) : ($thisPeriodTotalCalls > 0 ? 100 : 0)) : null;
+        $thisPeriodAssign = AssignCompanies::distinct('company_id')
+            ->where('assign_by', $id)->where('is_active', 1)
+            ->whereBetween('created_at', [$currentStart, $currentEnd])->count();
+        $prevPeriodAssign = $prevStart ? AssignCompanies::distinct('company_id')
+            ->where('assign_by', $id)->where('is_active', 1)
+            ->whereBetween('created_at', [$prevStart, $prevEnd])->count() : 0;
+        
+        $assignTrend = $prevStart ? ($prevPeriodAssign > 0 ? round((($thisPeriodAssign - $prevPeriodAssign) / $prevPeriodAssign) * 100, 1) : ($thisPeriodAssign > 0 ? 100 : 0)) : null;
+
+        $thisPeriodCompany = Company::whereBetween('created_at', [$currentStart, $currentEnd])->count();
+        $prevPeriodCompany = $prevStart ? Company::whereBetween('created_at', [$prevStart, $prevEnd])->count() : 0;
+        
+        $thisPeriodUnassigned = max(0, $thisPeriodCompany - $thisPeriodAssign);
+        $prevPeriodUnassigned = max(0, $prevPeriodCompany - $prevPeriodAssign);
+        $unassignedTrend = $prevStart ? ($prevPeriodUnassigned > 0 ? round((($thisPeriodUnassigned - $prevPeriodUnassigned) / $prevPeriodUnassigned) * 100, 1) : ($thisPeriodUnassigned > 0 ? 100 : 0)) : null;
+
+        // Analytics Overview Trends
+        $analyticsThisPeriodSales = Disposition::where('status_id', $saleStatusId)
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
+            ->count();
+        $analyticsPrevPeriodSales = $analyticsPrevStart ? Disposition::where('status_id', $saleStatusId)
+            ->whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd])
+            ->count() : 0;
+        $analyticsSalesTrend = $analyticsPrevStart ? ($analyticsPrevPeriodSales > 0 ? round((($analyticsThisPeriodSales - $analyticsPrevPeriodSales) / $analyticsPrevPeriodSales) * 100, 1) : ($analyticsThisPeriodSales > 0 ? 100 : 0)) : null;
+        
+        $analyticsThisPeriodZoom = CallLog::whereIn('user_id', $userIdList)
+            ->whereBetween('start_time', [$analyticsStart, $analyticsEnd])
+            ->distinct('caller_number')->count();
+        $analyticsPrevPeriodZoom = $analyticsPrevStart ? CallLog::whereIn('user_id', $userIdList)
+            ->whereBetween('start_time', [$analyticsPrevStart, $analyticsPrevEnd])
+            ->distinct('caller_number')->count() : 0;
+        $analyticsZoomTrend = $analyticsPrevStart ? ($analyticsPrevPeriodZoom > 0 ? round((($analyticsThisPeriodZoom - $analyticsPrevPeriodZoom) / $analyticsPrevPeriodZoom) * 100, 1) : ($analyticsThisPeriodZoom > 0 ? 100 : 0)) : null;
+
+        $analyticsThisPeriodCrm = Disposition::whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
+            ->count();
+        $analyticsPrevPeriodCrm = $analyticsPrevStart ? Disposition::whereIn('user_id', $userIdList)
+            ->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd])
+            ->count() : 0;
+        
+        $analyticsCrmTrend = $analyticsPrevStart ? ($analyticsPrevPeriodCrm > 0 ? round((($analyticsThisPeriodCrm - $analyticsPrevPeriodCrm) / $analyticsPrevPeriodCrm) * 100, 1) : ($analyticsThisPeriodCrm > 0 ? 100 : 0)) : null;
+        
+        $analyticsThisPeriodTotalCalls = $analyticsThisPeriodZoom + $analyticsThisPeriodCrm;
+        $analyticsPrevPeriodTotalCalls = $analyticsPrevPeriodZoom + $analyticsPrevPeriodCrm;
+        $analyticsTotalCallsTrend = $analyticsPrevStart ? ($analyticsPrevPeriodTotalCalls > 0 ? round((($analyticsThisPeriodTotalCalls - $analyticsPrevPeriodTotalCalls) / $analyticsPrevPeriodTotalCalls) * 100, 1) : ($analyticsThisPeriodTotalCalls > 0 ? 100 : 0)) : null;
+
+        $detail['analyticsOverview'] = [
+            'dailyData' => $analyticsOverview,
+            'trends' => [
+                'sales' => $analyticsSalesTrend,
+                'zoom' => $analyticsZoomTrend,
+                'crm' => $analyticsCrmTrend,
+                'total' => $analyticsTotalCallsTrend
+            ]
+        ];
+        $detail['kpiSparklineData'] = $kpiSparklineData;
+        $trendLabelMap = [
+            'today' => 'vs yesterday',
+            'yesterday' => 'vs previous day',
+            'last_week' => 'vs previous week',
+            'this_month' => 'vs last month',
+            'last_month' => 'vs previous month',
+            'this_year' => 'vs last year',
+            'custom' => 'vs previous period',
+            'life_time' => ''
+        ];
+        
+        $detail['trends'] = [
+            'sales' => $salesTrend,
+            'assigned' => $assignTrend,
+            'unassigned' => $unassignedTrend,
+            'label' => $trendLabelMap[$filter] ?? 'vs previous'
+        ];
 
         return Inertia::render('Dashboard', ['detail' => $detail, 'reportData' => $reportData ?? []]);
     }

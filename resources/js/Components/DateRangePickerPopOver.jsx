@@ -14,8 +14,7 @@ import {
 } from "@mui/material";
 import { DateCalendar } from "@mui/x-date-pickers";
 import { format } from "date-fns";
-import { useCallback } from "react";
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AutocompleteElement, useForm } from "react-hook-form-mui";
 import toast from "react-hot-toast";
 import * as yup from "yup";
@@ -38,7 +37,8 @@ const DateRangePickerWithFilters = ({
 
     const isAdmin = hasRole(auth, "Admin");
 
-    const managerOptionsArr = useCallback(() => {
+    const managerOptionsArr = useMemo(() => {
+        if (!managerOptions) return isAdmin ? [{ value: "all", label: "All" }] : [];
         const options = managerOptions.map((manager) => ({
             value: manager.id,
             label: manager.name,

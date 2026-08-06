@@ -17,6 +17,7 @@ import {
     TableHead,
     TableRow,
     Typography,
+    Box,
 } from "@mui/material";
 import { includes } from "lodash";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -40,7 +41,9 @@ import MetaDataCard from "./DashboardComponents/MetaDataCard";
 import TargetsTableCell from "./DashboardComponents/TargetsTableCell";
 import { AssignTargetComponent } from "./DashboardComponents/dialogs/AssignTargetComponent";
 import TotalCallsMade from "./DashboardComponents/MetaCardsComponents/TotalCallsMade";
+import AnalyticsOverview from "./DashboardComponents/AnalyticsOverview";
 import { hasRole } from "@/utils/AccessManager";
+import { ShoppingCart, Users, UserX, Activity, CalendarX } from "lucide-react";
 
 export default function Dashboard({ auth, detail, reportData }) {
     const { roles } = auth;
@@ -66,10 +69,14 @@ export default function Dashboard({ auth, detail, reportData }) {
                             {!isAdminOrManager ? (
                                 <TotalCallsMade
                                     count={detail.total_call_made}
+                                    trend={detail.trends?.total}
+                                    sparklineData={detail.kpiSparklineData?.map(d => d.total_calls)}
                                 />
                             ) : (
                                 <TotalSalesMade
                                     count={detail.total_sales_made}
+                                    trend={detail.trends?.sales}
+                                    sparklineData={detail.kpiSparklineData?.map(d => d.sales)}
                                 />
                             )}
                         </Grid>
@@ -79,6 +86,10 @@ export default function Dashboard({ auth, detail, reportData }) {
                                 format
                                 title="Total Assigned"
                                 count={detail.totalassigned || 0}
+                                trend={detail.trends?.assigned}
+                                trendLabel={detail.trends?.label}
+                                icon={<Users size={24} color="#1976d2" />}
+                                iconBg="#e3f2fd"
                             />
                         </Grid>
 
@@ -98,6 +109,10 @@ export default function Dashboard({ auth, detail, reportData }) {
                                     format
                                     title="Unassigned"
                                     count={detail.unassigned || 0}
+                                    trend={detail.trends?.unassigned}
+                                    trendLabel={detail.trends?.label}
+                                    icon={<UserX size={24} color="#f44336" />}
+                                    iconBg="#ffebee"
                                 />
                             </Grid>
                         )}
@@ -108,7 +123,8 @@ export default function Dashboard({ auth, detail, reportData }) {
                                     title="Online Users / Total Active Users"
                                     count={detail.online_users || 0}
                                     extraCount={detail.total_users || 0}
-                                    // isLinkOnCount={true}
+                                    icon={<Activity size={24} color="#4caf50" />}
+                                    iconBg="#e8f5e9"
                                 />
                             </Grid>
                         )}
@@ -127,7 +143,17 @@ export default function Dashboard({ auth, detail, reportData }) {
                                 <MetaDataCard
                                     title="Total Zoom Calls"
                                     count={detail.total_zoom_calls}
+                                    trend={detail.trends?.zoom}
+                                    sparklineData={detail.analyticsOverview?.dailyData?.map(d => d.zoom_calls)}
+                                    icon={<Video size={24} color="#ff9800" />}
+                                    iconBg="#fff3e0"
                                 />
+                            </Grid>
+                        )}
+
+                        {detail.analyticsOverview && (
+                            <Grid item xs={12}>
+                                <AnalyticsOverview data={detail.analyticsOverview} />
                             </Grid>
                         )}
 
@@ -752,7 +778,19 @@ const EventTableComponent = ({
                     rows={event}
                     tableMaxHeight={"calc(100vh - 370px)"}
                     CellComponent={EventsTableCellComponent}
-                    noDataMessage={"No events found"}
+                    noDataMessage={
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 5, gap: 2 }}>
+                            <Box sx={{ bgcolor: '#f3e5f5', p: 2, borderRadius: '50%' }}>
+                                <CalendarX size={48} color="#9c27b0" />
+                            </Box>
+                            <Typography variant="h6" color="text.secondary" fontWeight="bold">
+                                No Events Found
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                You have no upcoming events for this period.
+                            </Typography>
+                        </Box>
+                    }
                 />
             </Grid>
         </Grid>

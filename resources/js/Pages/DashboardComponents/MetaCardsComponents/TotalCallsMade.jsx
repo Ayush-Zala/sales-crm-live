@@ -14,8 +14,12 @@ import SimpleDataTable from "@/Components/SimpleDataTable";
 import MetaDataCard from "../MetaDataCard";
 import { formatDateTime } from "@/utils/date-time-formatters";
 import { green, pink } from "@mui/material/colors";
+import { PhoneCall } from "lucide-react";
 
-const TotalCallsMade = ({ count }) => {
+const TotalCallsMade = ({ count, trend, sparklineData }) => {
+    const urlFilter = new URLSearchParams(window.location.search).get("filter");
+    const [filter, setFilter] = useState(urlFilter || "life_time");
+
     const [callsDetailsDialog, setCallsDetailsDialog] = useState(false);
     const [callsDetails, setCallsDetails] = useState([]);
 
@@ -44,6 +48,10 @@ const TotalCallsMade = ({ count }) => {
                 format
                 title="Total Calls Made"
                 count={count || 0}
+                trend={trend}
+                sparklineData={sparklineData}
+                icon={<PhoneCall size={24} color="#1976d2" />}
+                iconBg="#e3f2fd"
                 isLinkOnCount={true}
                 handleClickOnCount={handleGetCallsDetails}
             />
