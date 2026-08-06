@@ -18,7 +18,10 @@ import {
     TableRow,
     Typography,
     Box,
+    useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { PieChart } from "@mui/x-charts/PieChart";
 import { includes } from "lodash";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
@@ -802,7 +805,7 @@ const DetailReportDialog = ({ open, onClose, data, name, userId, filter }) => {
         <Dialog
             open={open}
             onClose={(_, reason) => reason !== "backdropClick" && onClose()}
-            maxWidth="sm"
+            maxWidth="lg"
             fullWidth
         >
             <DialogTitle>{`${name}'s Detail Report`}</DialogTitle>
@@ -821,6 +824,9 @@ const DetailReportDialog = ({ open, onClose, data, name, userId, filter }) => {
 const DispositionTable = ({ data, userId, filter }) => {
     const [open, setOpen] = useState(false);
     const [dispositionData, setDispositionData] = useState(null);
+    const [hoveredRow, setHoveredRow] = useState(null);
+    const theme = useTheme();
+    const isLargeScreen = useMediaQuery(theme.breakpoints.up("lg"));
 
     const handleOpen = () => setOpen(true);
     const handleClose = () => setOpen(false);
@@ -831,7 +837,14 @@ const DispositionTable = ({ data, userId, filter }) => {
         .map(([disposition, calls]) => ({
             disposition,
             calls,
-        }));
+        }))
+        .filter(row => row.calls > 0)
+        .sort((a, b) => b.calls - a.calls);
+
+    const chartColors = [
+        '#00bcd4', '#2196f3', '#9c27b0', '#673ab7', '#3f51b5', '#03a9f4', '#009688', '#4caf50', '#8bc34a',
+        '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722', '#f44336', '#e91e63', '#795548', '#9e9e9e', '#607d8b'
+    ];
 
     const totalCalls = data["Total"]; // Get the total from the data
 
@@ -853,50 +866,101 @@ const DispositionTable = ({ data, userId, filter }) => {
             });
     };
 
+    const pieChartData = rows.map((row, index) => {
+        const baseColor = chartColors[index % chartColors.length];
+        const isFaded = hoveredRow && hoveredRow !== row.disposition;
+        return {
+            id: index,
+            value: row.calls,
+            label: row.disposition,
+            color: isFaded ? '#e0e0e0' : baseColor
+        };
+    });
+
     return (
         <>
-            <TableContainer component={Paper}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell>Disposition</TableCell>
-                            <TableCell>Calls</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {rows.map((row, index) => (
-                            <TableRow
-                                key={index}
-                                onClick={() => handleRowClick(row.disposition)}
-                                sx={{ cursor: "pointer" }}
-                            >
-                                <TableCell>{row.disposition}</TableCell>
-                                <TableCell>{row.calls}</TableCell>
-                            </TableRow>
-                        ))}
+            <Grid container spacing={3} alignItems="flex-start">
+                <Grid item xs={12} lg={6} sx={{ minHeight: 400, position: 'sticky', top: 0 }}>
+                    {rows.length > 0 ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                            <Box sx={{ flexGrow: 1, width: '100%', minHeight: 350, display: 'flex', justifyContent: 'center' }}>
+                                <PieChart
+                                    series={[
+                                        {
+                                            data: pieChartData,
+                                            innerRadius: 30,
+                                            outerRadius: 130,
+                                            paddingAngle: 1,
+                                            cornerRadius: 4,
+                                            highlightScope: { faded: 'global', highlighted: 'item' },
+                                            faded: { innerRadius: 30, additionalRadius: -30, color: 'gray' },
+                                        },
+                                    ]}
+                                    height={350}
+                                    margin={{ left: 10, right: 10, top: 20, bottom: 20 }}
+                                    slotProps={{
+                                        legend: { hidden: true }
+                                    }}
+                                />
+                            </Box>
+                        </Box>
+                    ) : (
+                        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                            <Typography color="text.secondary">No disposition data available</Typography>
+                        </Box>
+                    )}
+                </Grid>
 
-                        {/* Total row */}
-                        <TableRow>
-                            <TableCell>
-                                <Typography
-                                    variant="body1"
-                                    style={{ fontWeight: "bold" }}
-                                >
-                                    Total
-                                </Typography>
-                            </TableCell>
-                            <TableCell>
-                                <Typography
-                                    variant="body1"
-                                    style={{ fontWeight: "bold" }}
-                                >
-                                    {totalCalls}
-                                </Typography>
-                            </TableCell>
-                        </TableRow>
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                <Grid item xs={12} lg={6}>
+                    <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                        <Table stickyHeader>
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Disposition</TableCell>
+                                    <TableCell>Calls</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {rows.map((row, index) => (
+                                    <TableRow
+                                        key={index}
+                                        onClick={() => handleRowClick(row.disposition)}
+                                        onMouseEnter={() => setHoveredRow(row.disposition)}
+                                        onMouseLeave={() => setHoveredRow(null)}
+                                        sx={{ 
+                                            cursor: "pointer", 
+                                            backgroundColor: hoveredRow === row.disposition ? "rgba(0,0,0,0.08)" : "inherit",
+                                            "&:hover": { backgroundColor: "rgba(0,0,0,0.08)" } 
+                                        }}
+                                    >
+                                        <TableCell>
+                                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                                <Box sx={{ width: 12, height: 12, backgroundColor: chartColors[index % chartColors.length], mr: 1.5, borderRadius: '2px', flexShrink: 0 }} />
+                                                {row.disposition}
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell>{row.calls}</TableCell>
+                                    </TableRow>
+                                ))}
+
+                                {/* Total row */}
+                                <TableRow>
+                                    <TableCell>
+                                        <Typography variant="body1" style={{ fontWeight: "bold" }}>
+                                            Total
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography variant="body1" style={{ fontWeight: "bold" }}>
+                                            {totalCalls}
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                </Grid>
+            </Grid>
 
             {/* Display the disposition data details */}
             <DispositionDataDetails
