@@ -402,12 +402,14 @@ class CalendarController extends Controller
                 ->join('users', 'users.id', '=', 'calendars.created_by')
                 ->join('companies', 'companies.id', '=', 'calendars.company_id')
                 ->where(function ($query) use ($reportingauthorityid, $user) {
-                    if ($reportingauthorityid !== 'all' && $reportingauthorityid !== null) {
+                    if ($user) {
+                        // If a specific user is selected, show only that user's events
+                        $query->where('users.id', $user);
+                    } elseif ($reportingauthorityid !== 'all' && $reportingauthorityid !== null) {
+                        // If only a manager is selected (no user), show all users under that manager
                         $query->where('users.reporting_authority_id', $reportingauthorityid);
                     }
-                    if ($user) {
-                        $query->orWhere('users.id', $user);
-                    }
+                    // If 'all' is selected with no user, no filter — show all events
                 })
                 ->where(function ($query) use ($startDate, $endDate) {
                     $query->whereBetween('calendars.start_date', [$startDate, $endDate])

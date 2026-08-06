@@ -203,7 +203,16 @@ const DateRangePickerWithFilters = ({
                                             }))
                                     );
                                 } else {
-                                    setEmployeeOptions(userList);
+                                    // Flatten all teams from all managers into one list
+                                    const allUsers = managerOptions
+                                        ? managerOptions.flatMap((manager) =>
+                                              (manager.team || []).map((employee) => ({
+                                                  value: employee.id,
+                                                  label: employee.name,
+                                              }))
+                                          )
+                                        : userList;
+                                    setEmployeeOptions(allUsers);
                                 }
                                 handleSubmit(handleApply)();
                             },
