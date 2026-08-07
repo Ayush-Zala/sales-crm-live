@@ -102,9 +102,36 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
             console.error('[Reverb] ❌ Channel auth error:', err);
         });
 
+        // ── Shared Debounced Background Reload for Charts ──────────────────────
+        const silentChartReload = debounce(() => {
+            const styleId = 'hide-nprogress-style';
+            if (!document.getElementById(styleId)) {
+                const style = document.createElement('style');
+                style.id = styleId;
+                style.innerHTML = '#nprogress { display: none !important; opacity: 0 !important; visibility: hidden !important; }';
+                document.head.appendChild(style);
+            }
+
+            router.reload({ 
+                only: ['analyticsOverview'], 
+                preserveScroll: true, 
+                preserveState: true,
+                onFinish: () => {
+                    // NProgress has a fade-out animation that lasts about 400-800ms.
+                    // If we remove the style instantly, the user sees a quick flash of the bar at 100%.
+                    setTimeout(() => {
+                        const el = document.getElementById(styleId);
+                        if (el) el.remove();
+                    }, 1000);
+                }
+            });
+        }, 2000);
+
         // Real-time stats update (Sale / Assign / Unassign)
         channel.listen('.DashboardStatsUpdated', (data) => {
             console.log('[Reverb] DashboardStatsUpdated received:', data);
+            
+            // 1. Update Top KPIs instantly via pure React state
             const count = data.count || 1;
             if (data.type === 'sale') {
                 setTotalSales(prev => prev + count);
@@ -115,6 +142,9 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
                 setTotalAssigned(prev => Math.max(0, prev - count));
                 setTotalUnassigned(prev => prev + count);
             }
+
+            // 2. Silently fetch updated data for the Analytics Overview chart
+            silentChartReload();
         });
 
         // Real-time new calendar event
