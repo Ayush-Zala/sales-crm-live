@@ -242,11 +242,11 @@ class DashboardController extends Controller
                         ->join('users', 'users.id', '=', 'calendars.created_by')
                         ->join('companies', 'companies.id', '=', 'calendars.company_id')
                         ->where(function ($query) use ($today, $last_7_days) {
-                            $query->whereBetween('calendars.start_date', [$today, $last_7_days])
-                                ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
+                            $query->whereBetween('calendars.start_date', [$last_7_days, $today])
+                                ->orWhereBetween('calendars.end_date', [$last_7_days, $today])
                                 ->orWhere(function ($query) use ($today, $last_7_days) {
-                                    $query->where('calendars.start_date', '<=', $today)
-                                        ->where('calendars.end_date', '>=', $last_7_days);
+                                    $query->where('calendars.start_date', '<=', $last_7_days)
+                                        ->where('calendars.end_date', '>=', $today);
                                 });
                         })
                         ->get();
@@ -372,11 +372,11 @@ class DashboardController extends Controller
                         ->join('companies', 'companies.id', '=', 'calendars.company_id')
                         ->where('users.reporting_authority_id', \Auth::id())
                         ->where(function ($query) use ($today, $last_7_days) {
-                            $query->whereBetween('calendars.start_date', [$today, $last_7_days])
-                                ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
+                            $query->whereBetween('calendars.start_date', [$last_7_days, $today])
+                                ->orWhereBetween('calendars.end_date', [$last_7_days, $today])
                                 ->orWhere(function ($query) use ($today, $last_7_days) {
-                                    $query->where('calendars.start_date', '<=', $today)
-                                        ->where('calendars.end_date', '>=', $last_7_days);
+                                    $query->where('calendars.start_date', '<=', $last_7_days)
+                                        ->where('calendars.end_date', '>=', $today);
                                 });
                         })
                         ->get();

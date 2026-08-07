@@ -831,8 +831,12 @@ const EventTableComponent = ({
 }) => {
     // State management
     const [event, setEvent] = useState(
-        events || {} // Fallback to an empty object if no events
+        events || [] // Fallback to an empty array if no events
     );
+
+    useEffect(() => {
+        setEvent(events || []);
+    }, [events]);
 
     // Options for the employee select
     const employeeOptions =

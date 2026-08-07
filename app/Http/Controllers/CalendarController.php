@@ -123,7 +123,7 @@ class CalendarController extends Controller
                 'company_name' => $company?->name,
                 'user_name'    => $creator->name,
                 'userid'       => $creator->id,
-            ]))->toOthers();
+            ]));
 
             return response(["status" => 1, 'data' => $ins, 'message' => 'Event created successfully']);
         } else {
