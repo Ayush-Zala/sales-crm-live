@@ -6,7 +6,7 @@ import {
     DialogTitle,
     Typography,
 } from "@mui/material";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import MuiLink from "@mui/material/Link";
 import { Chip as MuiChip, styled } from "@mui/material";
 
@@ -19,6 +19,10 @@ import { PhoneCall } from "lucide-react";
 const TotalCallsMade = ({ count, trend, sparklineData }) => {
     const urlFilter = new URLSearchParams(window.location.search).get("filter");
     const [filter, setFilter] = useState(urlFilter || "life_time");
+
+    useEffect(() => {
+        setFilter(urlFilter || "life_time");
+    }, [urlFilter]);
 
     const [callsDetailsDialog, setCallsDetailsDialog] = useState(false);
     const [callsDetails, setCallsDetails] = useState([]);

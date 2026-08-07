@@ -239,7 +239,7 @@ const DateRangePickerWithFilters = ({
                         }}
                         autocompleteProps={{
                             isOptionEqualToValue: (option, value) =>
-                                option.id === value.id,
+                                option.value === value.value,
                             onChange: handleSubmit(handleApply),
                         }}
                     />

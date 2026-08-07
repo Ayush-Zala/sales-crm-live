@@ -42,10 +42,10 @@ class DashboardController extends Controller
             $prevStart = Carbon::today()->subDays(2)->startOfDay();
             $prevEnd = Carbon::today()->subDays(2)->endOfDay();
         } elseif ($filter == 'last_week') {
-            $currentStart = Carbon::now()->subWeek()->startOfWeek();
-            $currentEnd = Carbon::now()->subWeek()->endOfWeek();
-            $prevStart = Carbon::now()->subWeeks(2)->startOfWeek();
-            $prevEnd = Carbon::now()->subWeeks(2)->endOfWeek();
+            $currentStart = Carbon::today()->subDays(7)->startOfDay();
+            $currentEnd = Carbon::today()->endOfDay();
+            $prevStart = Carbon::today()->subDays(14)->startOfDay();
+            $prevEnd = Carbon::today()->subDays(7)->endOfDay();
         } elseif ($filter == 'this_month') {
             $currentStart = Carbon::now()->startOfMonth();
             $currentEnd = Carbon::now()->endOfMonth();
@@ -89,10 +89,10 @@ class DashboardController extends Controller
             $prevStart = Carbon::today()->subDays(2)->startOfDay();
             $prevEnd = Carbon::today()->subDays(2)->endOfDay();
         } elseif ($filter == 'last_week') {
-            $currentStart = Carbon::now()->subWeek()->startOfWeek();
-            $currentEnd = Carbon::now()->subWeek()->endOfWeek();
-            $prevStart = Carbon::now()->subWeeks(2)->startOfWeek();
-            $prevEnd = Carbon::now()->subWeeks(2)->endOfWeek();
+            $currentStart = Carbon::today()->subDays(7)->startOfDay();
+            $currentEnd = Carbon::today()->endOfDay();
+            $prevStart = Carbon::today()->subDays(14)->startOfDay();
+            $prevEnd = Carbon::today()->subDays(7)->endOfDay();
         } elseif ($filter == 'this_month') {
             $currentStart = Carbon::now()->startOfMonth();
             $currentEnd = Carbon::now()->endOfMonth();
@@ -173,7 +173,7 @@ class DashboardController extends Controller
                         ->whereBetween('updated_at', [$weekday, Carbon::today()->endOfDay()])
                         ->count();
                 } elseif ($filter == 'this_month') {
-                    $monthday = Carbon::today()->subDays(30)->startOfDay();
+                    $monthday = Carbon::now()->startOfMonth();
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
                         ->whereBetween('updated_at', [$monthday, Carbon::today()->endOfDay()])
                         ->count();
@@ -193,10 +193,14 @@ class DashboardController extends Controller
                 $onlineUsers = $onlineUsersCount;
                 $totalUsers = User::where('is_active', 1)->count(); // Get the total number of active users
 
-                $totalassign = AssignCompanies::distinct('company_id')
-                    ->where("is_active", 1)
-                    ->count();
-                $unassign = max(0, \App\Models\Client::count() - $totalassign);
+                $totalassign = cache()->remember('total_active_assign_companies', 3600, function() {
+                    return AssignCompanies::distinct('company_id')
+                        ->where("is_active", 1)
+                        ->count();
+                });
+                $unassign = max(0, cache()->remember('total_clients_count', 3600, function() {
+                    return \App\Models\Client::count();
+                }) - $totalassign);
 
                 $managersList = User::select('reporting_authority_id', DB::raw('(SELECT name FROM users as managers WHERE managers.id = users.reporting_authority_id) as manager_name'))
                     ->distinct()
@@ -276,22 +280,21 @@ class DashboardController extends Controller
                 if ($filter == 'today') {
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
                         ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->where('updated_at', 'like', '%' . date("Y-m-d") . '%')
+                        ->whereDate('updated_at', Carbon::today())
                         ->count();
                 } elseif ($filter == 'yesterday') {
                     $yesterday = date("Y-m-d", strtotime("-1 days"));
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
                         ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->where('updated_at', 'like', '%' . $yesterday . '%')
+                        ->whereDate('updated_at', $yesterday)
                         ->count();
                 } elseif ($filter == 'last_week') {
-                    $lastWeekStart = date("Y-m-d", strtotime("last week monday"));
-                    $lastWeekEnd = date("Y-m-d", strtotime("last week sunday"));
+                    $lastWeekStart = Carbon::today()->subDays(7)->startOfDay();
+                    $lastWeekEnd = Carbon::today()->endOfDay();
 
                     $totalsalesmade = Disposition::where('status_id', $saleStatusId)
                         ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->where('updated_at', '>=', $lastWeekStart)
-                        ->where('updated_at', '<=', $lastWeekEnd)
+                        ->whereBetween('updated_at', [$lastWeekStart, $lastWeekEnd])
                         ->count();
                 } elseif ($filter == 'this_month') {
                     // Get the first day of the current month
@@ -336,11 +339,15 @@ class DashboardController extends Controller
                     ->count(); // Get the total number of active users
 
                 // totalassign where user_id is in the userdetail
-                $totalassign = AssignCompanies::distinct('company_id')
-                    ->where('assign_by', $id)
-                    ->where("is_active", 1)
-                    ->count();
-                $unassign = max(0, \App\Models\Client::count() - $totalassign);
+                $totalassign = cache()->remember('total_assign_manager_' . $id, 3600, function() use ($id) {
+                    return AssignCompanies::distinct('company_id')
+                        ->where('assign_by', $id)
+                        ->where("is_active", 1)
+                        ->count();
+                });
+                $unassign = max(0, cache()->remember('total_clients_count', 3600, function() {
+                    return \App\Models\Client::count();
+                }) - $totalassign);
 
                 $managersList = User::select('users.reporting_authority_id', 'managers.name as manager_name')
                     ->join('users as managers', 'managers.id', '=', 'users.reporting_authority_id')
@@ -444,10 +451,10 @@ class DashboardController extends Controller
             }
 
             // get all target of this month of user from Target table and count percentage of target achieved by user
-            $targetCount = Target::where('user_id', $id)->where('time', 'like', '%' . strtoupper(date('M-Y')) . '%')->count();
+            $targetCount = Target::where('user_id', $id)->where('time', strtoupper(date('M-Y')))->count();
 
             if ($targetCount > 0) {
-                $target = Target::where('user_id', $id)->where('time', 'like', '%' . strtoupper(date('M-Y')) . '%')->get();
+                $target = Target::where('user_id', $id)->where('time', strtoupper(date('M-Y')))->get();
 
                 $targetValue = $target[0]->target_value;
 
@@ -531,7 +538,13 @@ class DashboardController extends Controller
         $analyticsFilter = $request->analytics_filter ?? 'this_month';
         list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
 
-        $userIdList = isset($userdetail) ? $userdetail->pluck('userid')->toArray() : [$id];
+        if ($rolesarr->contains('Admin') || $rolesarr->contains('Super Admin')) {
+            $userIdList = User::pluck('id')->toArray();
+        } elseif (isset($userdetail) && $userdetail instanceof \Illuminate\Support\Collection) {
+            $userIdList = $userdetail->pluck('userid')->toArray();
+        } else {
+            $userIdList = [$id];
+        }
 
         // 1. Daily Analytics for Area Chart (uses analyticsFilter dates)
         $dailyDispositions = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
@@ -798,7 +811,7 @@ class DashboardController extends Controller
                 $detailarr['Total'] = $total;
             } elseif ($duration == 'today') {
                 $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                    ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . date("Y-m-d") . '%')
+                    ->where('status_id', $dispo->id)->whereDate('updated_at', Carbon::today())
                     ->count();
 
                 $total += $detailarr[$dispo->name];
@@ -807,7 +820,7 @@ class DashboardController extends Controller
             } elseif ($duration == 'yesterday') {
                 $yesterday = date("Y-m-d", strtotime("-1 days"));
                 $detailarr[$dispo->name] = Disposition::where('user_id', $userid)
-                    ->where('status_id', $dispo->id)->Where('updated_at', 'like', '%' . $yesterday . '%')
+                    ->where('status_id', $dispo->id)->whereDate('updated_at', $yesterday)
                     ->count();
 
                 $total += $detailarr[$dispo->name];
@@ -839,71 +852,77 @@ class DashboardController extends Controller
 
     public function getReportDataManager($managersList)
     {
-        $team = [];
         $managerIds = collect($managersList)->pluck('reporting_authority_id')->filter()->toArray();
         if (empty($managerIds)) return [];
 
-        $allTeamMembers = User::select('id', 'name', 'reporting_authority_id')
-            ->whereIn('reporting_authority_id', $managerIds)
-            ->where('is_active', 1)
-            ->get();
-            
-        $userIds = $allTeamMembers->pluck('id')->toArray();
-        if (empty($userIds)) return [];
+        sort($managerIds);
+        $cacheKey = 'report_data_manager_' . md5(json_encode($managerIds));
 
-        $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
+        return cache()->remember($cacheKey, 3600, function() use ($managersList, $managerIds) {
+            $team = [];
 
-        $dispoCounts = Disposition::whereIn('user_id', $userIds)
-            ->groupBy('user_id')
-            ->select('user_id', DB::raw('COUNT(*) as total'))
-            ->pluck('total', 'user_id');
-
-        $dispoSalesCounts = Disposition::whereIn('user_id', $userIds)
-            ->where('status_id', $saleStatusId)
-            ->groupBy('user_id')
-            ->select('user_id', DB::raw('COUNT(*) as total'))
-            ->pluck('total', 'user_id');
-
-        $zoomCounts = CallLog::whereIn('user_id', $userIds)
-            ->groupBy('user_id')
-            ->select('user_id', DB::raw('COUNT(DISTINCT caller_number) as total'))
-            ->pluck('total', 'user_id');
-
-        // Group members by manager
-        $membersByManager = $allTeamMembers->groupBy('reporting_authority_id');
-
-        foreach ($managersList as $manager) {
-            $managerTeam = $membersByManager->get($manager->reporting_authority_id, collect([]));
-            $salesexe = [];
-            
-            foreach ($managerTeam as $val) {
-                $userid = $val->id;
+            $allTeamMembers = User::select('id', 'name', 'reporting_authority_id')
+                ->whereIn('reporting_authority_id', $managerIds)
+                ->where('is_active', 1)
+                ->get();
                 
-                $salecrmtotal = $dispoCounts->get($userid, 0);
-                $totalSales = $dispoSalesCounts->get($userid, 0);
-                $uniqueZoomCalls = $zoomCounts->get($userid, 0);
+            $userIds = $allTeamMembers->pluck('id')->toArray();
+            if (empty($userIds)) return [];
+
+            $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
+
+            $dispoCounts = Disposition::whereIn('user_id', $userIds)
+                ->groupBy('user_id')
+                ->select('user_id', DB::raw('COUNT(*) as total'))
+                ->pluck('total', 'user_id');
+
+            $dispoSalesCounts = Disposition::whereIn('user_id', $userIds)
+                ->where('status_id', $saleStatusId)
+                ->groupBy('user_id')
+                ->select('user_id', DB::raw('COUNT(*) as total'))
+                ->pluck('total', 'user_id');
+
+            $zoomCounts = CallLog::whereIn('user_id', $userIds)
+                ->groupBy('user_id')
+                ->select('user_id', DB::raw('COUNT(DISTINCT caller_number) as total'))
+                ->pluck('total', 'user_id');
+
+            // Group members by manager
+            $membersByManager = $allTeamMembers->groupBy('reporting_authority_id');
+
+            foreach ($managersList as $manager) {
+                $managerTeam = $membersByManager->get($manager->reporting_authority_id, collect([]));
+                $salesexe = [];
                 
-                $zoomtotal = abs($salecrmtotal - $uniqueZoomCalls);
+                foreach ($managerTeam as $val) {
+                    $userid = $val->id;
+                    
+                    $salecrmtotal = $dispoCounts->get($userid, 0);
+                    $totalSales = $dispoSalesCounts->get($userid, 0);
+                    $uniqueZoomCalls = $zoomCounts->get($userid, 0);
+                    
+                    $zoomtotal = abs($salecrmtotal - $uniqueZoomCalls);
+                    
+                    $salesexe[] = [
+                        'name' => $val->name, 
+                        'id' => $val->id, 
+                        'totalCall' => ($zoomtotal + $salecrmtotal), 
+                        'totalSales' => $totalSales,
+                        'zoomCalls' => $zoomtotal, 
+                        'crmCalls' => $salecrmtotal
+                    ];
+                }
                 
-                $salesexe[] = [
-                    'name' => $val->name, 
-                    'id' => $val->id, 
-                    'totalCall' => ($zoomtotal + $salecrmtotal), 
-                    'totalSales' => $totalSales,
-                    'zoomCalls' => $zoomtotal, 
-                    'crmCalls' => $salecrmtotal
+                $managerName = isset($manager->manager_name) ? $manager->manager_name : (isset($manager->name) ? $manager->name : 'Unknown');
+                $team['manager'][] = [
+                    'name' => $managerName,
+                    'id' => $manager->reporting_authority_id,
+                    'team' => $salesexe
                 ];
             }
-            
-            $managerName = isset($manager->manager_name) ? $manager->manager_name : (isset($manager->name) ? $manager->name : 'Unknown');
-            $team['manager'][] = [
-                'name' => $managerName,
-                'id' => $manager->reporting_authority_id,
-                'team' => $salesexe
-            ];
-        }
 
-        return $team;
+            return $team;
+        });
     }
 
     public function getReportDataForAdminManager(Request $request)
@@ -1075,7 +1094,7 @@ class DashboardController extends Controller
             if ($filter == 'today') {
                 // get all the sales with details like company name, user name, status name, updated_at
                 $sales = Disposition::where('dispositions.status_id', $statusId)
-                    ->where('dispositions.updated_at', 'like', '%' . date("Y-m-d") . '%')
+                    ->whereDate('dispositions.updated_at', Carbon::today())
                     ->join('companies', 'companies.id', '=', 'dispositions.company_id')
                     ->join('users', 'users.id', '=', 'dispositions.user_id')
                     ->join('disposition_statuses', 'disposition_statuses.id', '=', 'dispositions.status_id')
@@ -1086,7 +1105,7 @@ class DashboardController extends Controller
                 $yesterday = date("Y-m-d", strtotime("-1 days"));
 
                 $sales = Disposition::where('dispositions.status_id', $statusId)
-                    ->where('dispositions.updated_at', 'like', '%' . $yesterday . '%')
+                    ->whereDate('dispositions.updated_at', $yesterday)
                     ->join('companies', 'companies.id', '=', 'dispositions.company_id')
                     ->join('users', 'users.id', '=', 'dispositions.user_id')
                     ->join('disposition_statuses', 'disposition_statuses.id', '=', 'dispositions.status_id')
@@ -1094,12 +1113,11 @@ class DashboardController extends Controller
                     ->get();
             } else if ($filter == 'last_week') {
                 // get all the sales with details like company name, user name, status name, updated_at
-                $lastWeekStart = date("Y-m-d", strtotime("last week monday"));
-                $lastWeekEnd = date("Y-m-d", strtotime("last week sunday"));
+                $lastWeekStart = Carbon::today()->subDays(7)->startOfDay();
+                $lastWeekEnd = Carbon::today()->endOfDay();
 
                 $sales = Disposition::where('dispositions.status_id', $statusId)
-                    ->where('dispositions.updated_at', '>=', $lastWeekStart)
-                    ->where('dispositions.updated_at', '<=', $lastWeekEnd)
+                    ->whereBetween('dispositions.updated_at', [$lastWeekStart, $lastWeekEnd])
                     ->join('companies', 'companies.id', '=', 'dispositions.company_id')
                     ->join('users', 'users.id', '=', 'dispositions.user_id')
                     ->join('disposition_statuses', 'disposition_statuses.id', '=', 'dispositions.status_id')
@@ -1143,7 +1161,7 @@ class DashboardController extends Controller
             if ($filter == 'today') {
                 // get all the sales with details like company name, user name, status name, updated_at
                 $sales = Disposition::where('dispositions.status_id', $statusId)
-                    ->where('dispositions.updated_at', 'like', '%' . date("Y-m-d") . '%')
+                    ->whereDate('dispositions.updated_at', Carbon::today())
                     ->where('users.reporting_authority_id', Auth::id())
                     ->join('companies', 'companies.id', '=', 'dispositions.company_id')
                     ->join('users', 'users.id', '=', 'dispositions.user_id')
@@ -1155,7 +1173,7 @@ class DashboardController extends Controller
                 $yesterday = date("Y-m-d", strtotime("-1 days"));
 
                 $sales = Disposition::where('dispositions.status_id', $statusId)
-                    ->where('dispositions.updated_at', 'like', '%' . $yesterday . '%')
+                    ->whereDate('dispositions.updated_at', $yesterday)
                     ->where('users.reporting_authority_id', Auth::id())
                     ->join('companies', 'companies.id', '=', 'dispositions.company_id')
                     ->join('users', 'users.id', '=', 'dispositions.user_id')
@@ -1274,7 +1292,7 @@ class DashboardController extends Controller
                 ->join('clients', 'clients.id', '=', 'dispositions.client_id')
                 ->where('status_id', $disposition)
                 ->where('user_id', $userId)
-                ->where('dispositions.updated_at', 'like', '%' . date("Y-m-d") . '%')
+                ->whereDate('dispositions.updated_at', Carbon::today())
                 ->get();
         } else if ($filter == "yesterday") {
             $yesterday = date("Y-m-d", strtotime("-1 days"));
@@ -1284,7 +1302,7 @@ class DashboardController extends Controller
                 ->join('clients', 'clients.id', '=', 'dispositions.client_id')
                 ->where('status_id', $disposition)
                 ->where('user_id', $userId)
-                ->where('dispositions.updated_at', 'like', '%' . $yesterday . '%')
+                ->whereDate('dispositions.updated_at', $yesterday)
                 ->get();
         } else if ($filter == "last_7_days") {
             $lastWeekStart = date("Y-m-d", strtotime("last week monday"));

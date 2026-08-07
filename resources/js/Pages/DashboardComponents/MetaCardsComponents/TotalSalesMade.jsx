@@ -21,7 +21,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import MetaDataCard from "../MetaDataCard";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatDate, formatDateTime } from "@/utils/date-time-formatters";
 import { DateCalendar } from "@mui/x-date-pickers";
 import useUpdateSearchParam from "@/hooks/use-update-search-params";
@@ -30,6 +30,10 @@ import { DollarSign } from "lucide-react";
 const TotalSalesMade = ({ count, trend, sparklineData }) => {
     const urlFilter = new URLSearchParams(window.location.search).get("filter");
     const [filter, setFilter] = useState(urlFilter || "life_time");
+
+    useEffect(() => {
+        setFilter(urlFilter || "life_time");
+    }, [urlFilter]);
 
     const [salesDetailsDialog, setSalesDetailsDialog] = useState(false);
     const [salesDetails, setSalesDetails] = useState({});
