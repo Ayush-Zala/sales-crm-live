@@ -1,6 +1,6 @@
 import { router } from "@inertiajs/react"; // Adjust the import path as necessary
 
-const useUpdateSearchParam = (paramsToUpdate, baseUrl = "/account") => {
+const useUpdateSearchParam = (paramsToUpdate, baseUrl = "/account", options = {}) => {
     const params = new URLSearchParams(window.location.search);
 
     // Update or remove keys based on the provided paramsToUpdate object
@@ -15,6 +15,7 @@ const useUpdateSearchParam = (paramsToUpdate, baseUrl = "/account") => {
     router.get(baseUrl, Object.fromEntries(params.entries()), {
         preserveState: true,
         preserveScroll: true,
+        ...options,
     });
 };
 

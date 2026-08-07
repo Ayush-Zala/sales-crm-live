@@ -49,7 +49,7 @@ import AnalyticsOverview from "./DashboardComponents/AnalyticsOverview";
 import { hasRole } from "@/utils/AccessManager";
 import { ShoppingCart, Users, UserX, Activity, CalendarX } from "lucide-react";
 
-export default function Dashboard({ auth, detail, reportData }) {
+export default function Dashboard({ auth, detail, reportData, analyticsOverview }) {
     const { roles } = auth;
 
     const isAdminOrManager =
@@ -208,16 +208,16 @@ export default function Dashboard({ auth, detail, reportData }) {
                                     title="Total Zoom Calls"
                                     count={detail.total_zoom_calls}
                                     trend={detail.trends?.zoom}
-                                    sparklineData={detail.analyticsOverview?.dailyData?.map(d => d.zoom_calls)}
+                                    sparklineData={detail.kpiSparklineData?.map(d => d.zoom_calls)}
                                     icon={<Video size={24} color="#ff9800" />}
                                     iconBg="#fff3e0"
                                 />
                             </Grid>
                         )}
 
-                        {detail.analyticsOverview && (
+                        {analyticsOverview && (
                             <Grid item xs={12}>
-                                <AnalyticsOverview data={detail.analyticsOverview} />
+                                <AnalyticsOverview data={analyticsOverview} />
                             </Grid>
                         )}
 

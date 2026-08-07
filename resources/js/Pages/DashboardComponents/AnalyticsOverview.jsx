@@ -19,7 +19,7 @@ export default function AnalyticsOverview({ data = null }) {
         if (val === 'custom') {
             setOpenDialog(true);
         } else {
-            useUpdateSearchParam({ analytics_filter: val }, "/dashboard");
+            useUpdateSearchParam({ analytics_filter: val }, "/dashboard", { only: ['analyticsOverview'] });
         }
     };
     if (!data || !data.dailyData || data.dailyData.length === 0) return null;
@@ -177,7 +177,7 @@ const CustomDateRangeDialog = ({ open, onClose, dateRange, setDateRange }) => {
             analytics_filter: 'custom',
             analytics_start: formatDate(dateRange[0].toISOString(), "yyyy-MM-dd"),
             analytics_end: formatDate(dateRange[1].toISOString(), "yyyy-MM-dd")
-        }, "/dashboard");
+        }, "/dashboard", { only: ['analyticsOverview'] });
         onClose();
     };
 

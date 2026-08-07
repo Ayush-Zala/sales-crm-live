@@ -118,692 +118,698 @@ class DashboardController extends Controller
         return [$currentStart, $currentEnd, $prevStart, $prevEnd];
     }
 
-    public function index(Request $request)
+        public function index(Request $request)
     {
-        $id = Auth::id();
-        $rolesarr = new Collection(Auth::user()->getRoleNames());
-        $onlineUsers = 0;
-        $events = [];
+        $id = \Auth::id();
+        $rolesarr = new \Illuminate\Support\Collection(\Auth::user()->getRoleNames());
 
-        $filter = $request->filter;
-        
-        if ($filter == 'custom') {
-            $request->merge([
-                'startDateFilter' => $request->startDateFilter ?? '1970-01-01',
-                'endDateFilter' => $request->endDateFilter ?? Carbon::now()->toDateString()
-            ]);
-        }
+        $detailClosure = function () use ($request, $id, $rolesarr) {
+            $onlineUsers = 0;
+            $events = [];
 
-        if (($rolesarr->contains('Admin')) || $rolesarr->contains('Business Development Manager')) {
-            if ($rolesarr->contains('Admin')) {
-                $userdetail = User::select('users.id as userid', 'users.name as username')
-                    ->join('model_has_roles', 'model_has_roles.model_id', '=', 'users.id')
-                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-                    ->where('users.is_active', 1)
-                    ->whereIn('roles.name', ['Sales Executives', 'Business Development Team Lead'])
-                    ->get();
+            $filter = $request->filter;
+            
+            if ($filter == 'custom') {
+                $request->merge([
+                    'startDateFilter' => $request->startDateFilter ?? '1970-01-01',
+                    'endDateFilter' => $request->endDateFilter ?? \Carbon\Carbon::now()->toDateString()
+                ]);
+            }
 
-                // Now, check for any users in the targets table who are not in the userdetail list
-                $existingUserIds = $userdetail->pluck('userid')->toArray();
-                $additionalTargets = Target::select('users.name as name', 'targets.*')
-                    ->join('users', 'users.id', '=', 'targets.user_id')
-                    ->where('time', strtoupper(date('M-Y')))
-                    ->whereNotIn('targets.user_id', $existingUserIds)
-                    ->get();
+            if (($rolesarr->contains('Admin')) || $rolesarr->contains('Business Development Manager')) {
+                if ($rolesarr->contains('Admin')) {
+                    $userdetail = \App\Models\User::select('users.id as userid', 'users.name as username')
+                        ->join('model_has_roles', 'model_has_roles.model_id', '=', 'users.id')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->where('users.is_active', 1)
+                        ->whereIn('roles.name', ['Sales Executives', 'Business Development Team Lead'])
+                        ->get();
 
-                // Add the additional users from the targets table to the allTargets array
-                $allTargets = [];
-                $allTargets = array_merge($allTargets, $additionalTargets->toArray());
+                    $existingUserIds = $userdetail->pluck('userid')->toArray();
+                    $additionalTargets = \App\Models\Target::select('users.name as name', 'targets.*')
+                        ->join('users', 'users.id', '=', 'targets.user_id')
+                        ->where('time', strtoupper(date('M-Y')))
+                        ->whereNotIn('targets.user_id', $existingUserIds)
+                        ->get();
 
-                $saleStatusId = DispositionStatus::where('name', 'Sale')->first()->id;
+                    $allTargets = [];
+                    $allTargets = array_merge($allTargets, $additionalTargets->toArray());
 
-                if ($filter == 'today') {
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereBetween('updated_at', [Carbon::today(), Carbon::today()->endOfDay()])
-                        ->count();
-                } elseif ($filter == 'yesterday') {
-                    $yesterdayStart = Carbon::yesterday();
-                    $yesterdayEnd = Carbon::yesterday()->endOfDay();
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereBetween('updated_at', [$yesterdayStart, $yesterdayEnd])
-                        ->count();
-                } elseif ($filter == 'last_week') {
-                    $weekday = Carbon::today()->subDays(7)->startOfDay();
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereBetween('updated_at', [$weekday, Carbon::today()->endOfDay()])
-                        ->count();
-                } elseif ($filter == 'this_month') {
-                    $monthday = Carbon::now()->startOfMonth();
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereBetween('updated_at', [$monthday, Carbon::today()->endOfDay()])
-                        ->count();
-                } elseif ($filter == 'custom') {
-                    $from = Carbon::parse($request->startDateFilter)->startOfDay();
-                    $to = Carbon::parse($request->endDateFilter)->endOfDay();
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereBetween('updated_at', [$from, $to])
-                        ->count();
-                } else {
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)->count();
-                }
+                    $saleStatusId = \App\Models\DispositionStatus::where('name', 'Sale')->first()->id;
 
-                // get count of all online users from Cache
-                // $onlineUsers = Cache::get('online-users', []);
-                $onlineUsersCount = Cache::where('key', 'like', 'user-is-online-%')->where('expiration', '>=', time())->count();
-                $onlineUsers = $onlineUsersCount;
-                $totalUsers = User::where('is_active', 1)->count(); // Get the total number of active users
-
-                $totalassign = cache()->remember('total_active_assign_companies', 3600, function() {
-                    return AssignCompanies::distinct('company_id')
-                        ->where("is_active", 1)
-                        ->count();
-                });
-                $unassign = max(0, cache()->remember('total_clients_count', 3600, function() {
-                    return \App\Models\Client::count();
-                }) - $totalassign);
-
-                $managersList = User::select('reporting_authority_id', DB::raw('(SELECT name FROM users as managers WHERE managers.id = users.reporting_authority_id) as manager_name'))
-                    ->distinct()
-                    ->whereNotNull('reporting_authority_id')
-                    ->whereNotExists(function ($query) {
-                        $query->select(DB::raw(1))
-                            ->from('model_has_roles')
-                            ->where('model_has_roles.role_id', '=', 1)
-                            ->whereRaw('model_has_roles.model_id = users.reporting_authority_id');
-                    })
-                    ->get();
-
-                $reportData = $this->getReportDataManager($managersList);
-
-                $existingUserIds = $userdetail->pluck('userid')->toArray();
-                $monthTargets = Target::select('users.name as name', 'targets.*')
-                    ->join('users', 'users.id', '=', 'targets.user_id')
-                    ->where('time', strtoupper(date('M-Y')))
-                    ->whereIn('targets.user_id', $existingUserIds)
-                    ->get()
-                    ->keyBy('user_id');
-
-                foreach ($userdetail as $val) {
-                    if ($monthTargets->has($val->userid)) {
-                        $allTargets[] = $monthTargets->get($val->userid)->toArray();
+                    if ($filter == 'today') {
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereBetween('updated_at', [\Carbon\Carbon::today(), \Carbon\Carbon::today()->endOfDay()])
+                            ->count();
+                    } elseif ($filter == 'yesterday') {
+                        $yesterdayStart = \Carbon\Carbon::yesterday();
+                        $yesterdayEnd = \Carbon\Carbon::yesterday()->endOfDay();
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereBetween('updated_at', [$yesterdayStart, $yesterdayEnd])
+                            ->count();
+                    } elseif ($filter == 'last_week') {
+                        $weekday = \Carbon\Carbon::today()->subDays(7)->startOfDay();
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereBetween('updated_at', [$weekday, \Carbon\Carbon::today()->endOfDay()])
+                            ->count();
+                    } elseif ($filter == 'this_month') {
+                        $monthday = \Carbon\Carbon::now()->startOfMonth();
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereBetween('updated_at', [$monthday, \Carbon\Carbon::today()->endOfDay()])
+                            ->count();
+                    } elseif ($filter == 'custom') {
+                        $from = \Carbon\Carbon::parse($request->startDateFilter)->startOfDay();
+                        $to = \Carbon\Carbon::parse($request->endDateFilter)->endOfDay();
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereBetween('updated_at', [$from, $to])
+                            ->count();
                     } else {
-                        $allTargets[] = [
-                            'user_id' => $val->userid,
-                            'name' => $val->username,
-                            'target_achieved' => 0,
-                            'target_value' => 0,
-                            'time' => strtoupper(Carbon::now()->format('M-Y')),
-                        ];
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)->count();
                     }
+
+                    $onlineUsersCount = \App\Models\Cache::where('key', 'like', 'user-is-online-%')->where('expiration', '>=', time())->count();
+                    $onlineUsers = $onlineUsersCount;
+                    $totalUsers = \App\Models\User::where('is_active', 1)->count(); 
+
+                    $totalassign = cache()->remember('total_active_assign_companies', 3600, function() {
+                        return \App\Models\AssignCompanies::distinct('company_id')
+                            ->where("is_active", 1)
+                            ->count();
+                    });
+                    $unassign = max(0, cache()->remember('total_clients_count', 3600, function() {
+                        return \App\Models\Client::count();
+                    }) - $totalassign);
+
+                    $existingUserIds = $userdetail->pluck('userid')->toArray();
+                    $monthTargets = \App\Models\Target::select('users.name as name', 'targets.*')
+                        ->join('users', 'users.id', '=', 'targets.user_id')
+                        ->where('time', strtoupper(date('M-Y')))
+                        ->whereIn('targets.user_id', $existingUserIds)
+                        ->get()
+                        ->keyBy('user_id');
+
+                    foreach ($userdetail as $val) {
+                        if ($monthTargets->has($val->userid)) {
+                            $allTargets[] = $monthTargets->get($val->userid)->toArray();
+                        } else {
+                            $allTargets[] = [
+                                'user_id' => $val->userid,
+                                'name' => $val->username,
+                                'target_achieved' => 0,
+                                'target_value' => 0,
+                                'time' => strtoupper(\Carbon\Carbon::now()->format('M-Y')),
+                            ];
+                        }
+                    }
+
+                    $today = \Carbon\Carbon::today()->toDateString();
+                    $last_7_days = \Carbon\Carbon::today()->subDays(7)->toDateString();
+
+                    $events = \App\Models\Calendar::select(
+                        "calendars.id as id",
+                        "calendars.title as title",
+                        "calendars.start_date as start_date",
+                        "calendars.end_date as end_date",
+                        "calendars.description as description",
+                        "calendars.repeat_rule as repeat_rule",
+                        "calendars.all_day as all_day",
+                        "calendars.timezone as timezone",
+                        "calendars.company_id as company_id",
+                        "users.name as user_name",
+                        "users.id as userid",
+                        'companies.name as company_name',
+                    )
+                        ->join('users', 'users.id', '=', 'calendars.created_by')
+                        ->join('companies', 'companies.id', '=', 'calendars.company_id')
+                        ->where(function ($query) use ($today, $last_7_days) {
+                            $query->whereBetween('calendars.start_date', [$today, $last_7_days])
+                                ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
+                                ->orWhere(function ($query) use ($today, $last_7_days) {
+                                    $query->where('calendars.start_date', '<=', $today)
+                                        ->where('calendars.end_date', '>=', $last_7_days);
+                                });
+                        })
+                        ->get();
+                } else {
+                    $userdetail = \App\Models\User::select('users.id as userid', 'users.name as username')
+                        ->join('model_has_roles', 'model_has_roles.model_id', '=', 'users.id')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->where('users.reporting_authority_id', $id)
+                        ->where('users.is_active', 1)
+                        ->whereIn('roles.name', ['Sales Executives', 'Business Development Team Lead'])
+                        ->get();
+
+                    $saleStatusId = \App\Models\DispositionStatus::where('name', 'Sale')->first()->id;
+
+                    if ($filter == 'today') {
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                            ->whereDate('updated_at', \Carbon\Carbon::today())
+                            ->count();
+                    } elseif ($filter == 'yesterday') {
+                        $yesterday = date("Y-m-d", strtotime("-1 days"));
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                            ->whereDate('updated_at', $yesterday)
+                            ->count();
+                    } elseif ($filter == 'last_week') {
+                        $lastWeekStart = \Carbon\Carbon::today()->subDays(7)->startOfDay();
+                        $lastWeekEnd = \Carbon\Carbon::today()->endOfDay();
+
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                            ->whereBetween('updated_at', [$lastWeekStart, $lastWeekEnd])
+                            ->count();
+                    } elseif ($filter == 'this_month') {
+                        $firstDayOfThisMonth = date("Y-m-01");
+                        $today = date("Y-m-d");
+
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                            ->whereDate('updated_at', '>=', $firstDayOfThisMonth)
+                            ->whereDate('updated_at', '<=', $today)
+                            ->count();
+                    } elseif ($filter == 'custom') {
+                        $from = $request->startDateFilter;
+                        $to = $request->endDateFilter;
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                            ->where([['updated_at', '>=', $from], ['updated_at', '<=', $to]])
+                            ->count();
+                    } else {
+                        $totalsalesmade = \App\Models\Disposition::where('status_id', $saleStatusId)
+                            ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                            ->count();
+                    }
+
+                    $onlineUsers = \App\Models\Cache::where(function ($query) use ($userdetail, $id) {
+                        $userIds = $userdetail->pluck('userid')->toArray();
+                        $userIds[] = $id; 
+
+                        foreach ($userIds as $userId) {
+                            $query->orWhere('key', 'like', "user-is-online-$userId");
+                        }
+                    })->where('expiration', '>=', time())->count();
+
+                    $totalUsers = \App\Models\User::where('is_active', 1)
+                        ->where(function($q) use ($id) {
+                            $q->where('reporting_authority_id', $id)
+                              ->orWhere('id', $id);
+                        })
+                        ->count(); 
+
+                    $totalassign = cache()->remember('total_assign_manager_' . $id, 3600, function() use ($id) {
+                        return \App\Models\AssignCompanies::distinct('company_id')
+                            ->where('assign_by', $id)
+                            ->where("is_active", 1)
+                            ->count();
+                    });
+                    $unassign = max(0, cache()->remember('total_clients_count', 3600, function() {
+                        return \App\Models\Client::count();
+                    }) - $totalassign);
+
+                    $existingUserIds = $userdetail->pluck('userid')->toArray();
+                    $monthTargets = \App\Models\Target::select('users.name as name', 'targets.*')
+                        ->join('users', 'users.id', '=', 'targets.user_id')
+                        ->where('time', strtoupper(date('M-Y')))
+                        ->whereIn('targets.user_id', $existingUserIds)
+                        ->get()
+                        ->keyBy('user_id');
+
+                    $allTargets = [];
+                    foreach ($userdetail as $val) {
+                        if ($monthTargets->has($val->userid)) {
+                            $allTargets[] = $monthTargets->get($val->userid)->toArray();
+                        } else {
+                            $allTargets[] = [
+                                'user_id' => $val->userid,
+                                'name' => $val->username,
+                                'target_achieved' => 0,
+                                'target_value' => 0,
+                                'time' => strtoupper(\Carbon\Carbon::now()->format('M-Y')),
+                            ];
+                        }
+                    }
+
+                    $today = \Carbon\Carbon::today()->toDateString();
+                    $last_7_days = \Carbon\Carbon::today()->subDays(7)->toDateString();
+
+                    $events = \App\Models\Calendar::select(
+                        "calendars.id as id",
+                        "calendars.title as title",
+                        "calendars.start_date as start_date",
+                        "calendars.end_date as end_date",
+                        "calendars.description as description",
+                        "calendars.repeat_rule as repeat_rule",
+                        "calendars.all_day as all_day",
+                        "calendars.timezone as timezone",
+                        "calendars.company_id as company_id",
+                        "users.name as user_name",
+                        "users.id as userid",
+                        'companies.name as company_name',
+                    )
+                        ->join('users', 'users.id', '=', 'calendars.created_by')
+                        ->join('companies', 'companies.id', '=', 'calendars.company_id')
+                        ->where('users.reporting_authority_id', \Auth::id())
+                        ->where(function ($query) use ($today, $last_7_days) {
+                            $query->whereBetween('calendars.start_date', [$today, $last_7_days])
+                                ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
+                                ->orWhere(function ($query) use ($today, $last_7_days) {
+                                    $query->where('calendars.start_date', '<=', $today)
+                                        ->where('calendars.end_date', '>=', $last_7_days);
+                                });
+                        })
+                        ->get();
                 }
 
-                $today = Carbon::today()->toDateString();
-                $last_7_days = Carbon::today()->subDays(7)->toDateString();
-
-                $events = Calendar::select(
-                    "calendars.id as id",
-                    "calendars.title as title",
-                    "calendars.start_date as start_date",
-                    "calendars.end_date as end_date",
-                    "calendars.description as description",
-                    "calendars.repeat_rule as repeat_rule",
-                    "calendars.all_day as all_day",
-                    "calendars.timezone as timezone",
-                    "calendars.company_id as company_id",
-                    "users.name as user_name",
-                    "users.id as userid",
-                    'companies.name as company_name',
-                )
-                    ->join('users', 'users.id', '=', 'calendars.created_by')
-                    ->join('companies', 'companies.id', '=', 'calendars.company_id')
-                    ->where(function ($query) use ($today, $last_7_days) {
-                        $query->whereBetween('calendars.start_date', [$today, $last_7_days])
-                            ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
-                            ->orWhere(function ($query) use ($today, $last_7_days) {
-                                $query->where('calendars.start_date', '<=', $today)
-                                    ->where('calendars.end_date', '>=', $last_7_days);
-                            });
-                    })
-                    ->get();
+                $detail['name'] = \Auth::user()->name;
+                $detail['user_id'] = $id;
+                $detail['totalassigned'] = $totalassign;
+                $detail['unassigned'] = $unassign;
+                $detail['online_users'] = $onlineUsers;
+                $detail['total_users'] = $totalUsers;
+                $detail['user_detail'] = $userdetail;
+                $detail['today_events'] = $events;
+                $detail['targets'] = $allTargets ?? [];
+                $detail['total_sales_made'] = $totalsalesmade;
             } else {
-                $userdetail = User::select('users.id as userid', 'users.name as username')
-                    ->join('model_has_roles', 'model_has_roles.model_id', '=', 'users.id')
-                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-                    ->where('users.reporting_authority_id', $id)
-                    ->where('users.is_active', 1)
-                    ->whereIn('roles.name', ['Sales Executives', 'Business Development Team Lead'])
-                    ->get();
+                $userdetail = \App\Models\User::find($id);
+                $totalassignuser = \App\Models\AssignCompanies::where('user_id', $id)->distinct('company_id')->count();
 
-                // total sales made from Disposition table of all the users who have reporting authority id of this user
-                $saleStatusId = DispositionStatus::where('name', 'Sale')->first()->id;
+                $totalcalls = \App\Models\Disposition::where('user_id', $id)->count();
+                $calltoday = \App\Models\Disposition::where('user_id', $id)
+                    ->whereBetween('updated_at', [\Carbon\Carbon::today(), \Carbon\Carbon::today()->endOfDay()])->count();
+                $totalZoomCalls = \App\Models\CallLog::where('user_id', $id)->count();
 
-                if ($filter == 'today') {
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->whereDate('updated_at', Carbon::today())
+                $dispostatus = \App\Models\DispositionStatus::select('id', 'name')->get();
+                
+                $detailarr = [];
+                foreach ($dispostatus as $dispo) {
+                    $detailarr["today"][$dispo->name] = \App\Models\Disposition::where('user_id', $id)
+                        ->where('status_id', $dispo->id)->whereBetween('updated_at', [\Carbon\Carbon::today(), \Carbon\Carbon::today()->endOfDay()])
                         ->count();
-                } elseif ($filter == 'yesterday') {
-                    $yesterday = date("Y-m-d", strtotime("-1 days"));
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->whereDate('updated_at', $yesterday)
-                        ->count();
-                } elseif ($filter == 'last_week') {
-                    $lastWeekStart = Carbon::today()->subDays(7)->startOfDay();
-                    $lastWeekEnd = Carbon::today()->endOfDay();
 
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->whereBetween('updated_at', [$lastWeekStart, $lastWeekEnd])
-                        ->count();
-                } elseif ($filter == 'this_month') {
-                    // Get the first day of the current month
-                    $firstDayOfThisMonth = date("Y-m-01");
-                    // Today's date
-                    $today = date("Y-m-d");
-
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        // Using whereDate to compare only the date part
-                        ->whereDate('updated_at', '>=', $firstDayOfThisMonth)
-                        ->whereDate('updated_at', '<=', $today)
-                        ->count();
-                } elseif ($filter == 'custom') {
-                    $from = $request->startDateFilter;
-                    $to = $request->endDateFilter;
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
-                        ->where([['updated_at', '>=', $from], ['updated_at', '<=', $to]])
-                        ->count();
-                } else {
-                    $totalsalesmade = Disposition::where('status_id', $saleStatusId)
-                        ->whereIn('user_id', $userdetail->pluck('userid')->toArray())
+                    $detailarr["yesterday"][$dispo->name] = \App\Models\Disposition::where('user_id', $id)
+                        ->where('status_id', $dispo->id)->whereBetween('updated_at', [\Carbon\Carbon::yesterday(), \Carbon\Carbon::yesterday()->endOfDay()])
                         ->count();
                 }
 
-                // get count of all online users from Cache of all the users who have reporting authority id of this user
-                $onlineUsers = Cache::where(function ($query) use ($userdetail, $id) {
-                    $userIds = $userdetail->pluck('userid')->toArray();
-                    $userIds[] = $id; // Include the manager themselves
+                $targetCount = \App\Models\Target::where('user_id', $id)->where('time', strtoupper(date('M-Y')))->count();
 
-                    foreach ($userIds as $userId) {
-                        $query->orWhere('key', 'like', "user-is-online-$userId");
-                    }
-                })->where('expiration', '>=', time())->count();
+                if ($targetCount > 0) {
+                    $target = \App\Models\Target::where('user_id', $id)->where('time', strtoupper(date('M-Y')))->get();
+                    $targetValue = $target[0]->target_value;
+                    $targetAchieved = $target[0]->target_achieved;
 
-                $totalUsers = User::where('is_active', 1)
-                    ->where(function($q) use ($id) {
-                        $q->where('reporting_authority_id', $id)
-                          ->orWhere('id', $id);
-                    })
-                    ->count(); // Get the total number of active users
-
-                // totalassign where user_id is in the userdetail
-                $totalassign = cache()->remember('total_assign_manager_' . $id, 3600, function() use ($id) {
-                    return AssignCompanies::distinct('company_id')
-                        ->where('assign_by', $id)
-                        ->where("is_active", 1)
-                        ->count();
-                });
-                $unassign = max(0, cache()->remember('total_clients_count', 3600, function() {
-                    return \App\Models\Client::count();
-                }) - $totalassign);
-
-                $managersList = User::select('users.reporting_authority_id', 'managers.name as manager_name')
-                    ->join('users as managers', 'managers.id', '=', 'users.reporting_authority_id')
-                    ->distinct()
-                    ->where('users.reporting_authority_id', '=', Auth::id())
-                    ->whereNotExists(function ($query) {
-                        $query->select(DB::raw(1))
-                            ->from('model_has_roles')
-                            ->where('model_has_roles.role_id', '=', 1)
-                            ->whereRaw('model_has_roles.model_id = users.reporting_authority_id');
-                    })
-                    ->get();
-
-                $reportData = $this->getReportDataManager($managersList);
-
-                $existingUserIds = $userdetail->pluck('userid')->toArray();
-                $monthTargets = Target::select('users.name as name', 'targets.*')
-                    ->join('users', 'users.id', '=', 'targets.user_id')
-                    ->where('time', strtoupper(date('M-Y')))
-                    ->whereIn('targets.user_id', $existingUserIds)
-                    ->get()
-                    ->keyBy('user_id');
-
-                $allTargets = [];
-                foreach ($userdetail as $val) {
-                    if ($monthTargets->has($val->userid)) {
-                        $allTargets[] = $monthTargets->get($val->userid)->toArray();
+                    if (!empty($target) && isset($target[0]) && $targetValue > 0) {
+                        $target_percentage = round(($target[0]->target_achieved / $targetValue) * 100, 2);
                     } else {
-                        $allTargets[] = [
-                            'user_id' => $val->userid,
-                            'name' => $val->username,
-                            'target_achieved' => 0,
-                            'target_value' => 0,
-                            'time' => strtoupper(Carbon::now()->format('M-Y')),
-                        ];
+                        $target_percentage = 0;
                     }
-                }
 
-                $today = Carbon::today()->toDateString();
-                $last_7_days = Carbon::today()->subDays(7)->toDateString();
-
-                $events = Calendar::select(
-                    "calendars.id as id",
-                    "calendars.title as title",
-                    "calendars.start_date as start_date",
-                    "calendars.end_date as end_date",
-                    "calendars.description as description",
-                    "calendars.repeat_rule as repeat_rule",
-                    "calendars.all_day as all_day",
-                    "calendars.timezone as timezone",
-                    "calendars.company_id as company_id",
-                    "users.name as user_name",
-                    "users.id as userid",
-                    'companies.name as company_name',
-                )
-                    ->join('users', 'users.id', '=', 'calendars.created_by')
-                    ->join('companies', 'companies.id', '=', 'calendars.company_id')
-                    ->where('users.reporting_authority_id', Auth::id())
-                    ->where(function ($query) use ($today, $last_7_days) {
-                        $query->whereBetween('calendars.start_date', [$today, $last_7_days])
-                            ->orWhereBetween('calendars.end_date', [$today, $last_7_days])
-                            ->orWhere(function ($query) use ($today, $last_7_days) {
-                                $query->where('calendars.start_date', '<=', $today)
-                                    ->where('calendars.end_date', '>=', $last_7_days);
-                            });
-                    })
-                    ->get();
-            }
-
-            $detail['name'] = Auth::user()->name;
-            $detail['user_id'] = $id;
-            $detail['totalassigned'] = $totalassign;
-            $detail['unassigned'] = $unassign;
-            $detail['online_users'] = $onlineUsers;
-            $detail['total_users'] = $totalUsers;
-            $detail['user_detail'] = $userdetail;
-            $detail['today_events'] = $events;
-            $detail['targets'] = $allTargets ?? [];
-            $detail['total_sales_made'] = $totalsalesmade;
-
-        } else {
-            // get user reports if user is not admin or business development manager from user, assignCompanies, DispositionStatus and Disposition database tables
-            $userdetail = User::find($id);
-            $totalassignuser = AssignCompanies::where('user_id', $id)->distinct('company_id')->count();
-
-            $totalcalls = Disposition::where('user_id', $id)->count();
-            $calltoday = Disposition::where('user_id', $id)
-                ->whereBetween('updated_at', [Carbon::today(), Carbon::today()->endOfDay()])->count();
-            $totalZoomCalls = CallLog::where('user_id', $id)->count();
-
-            $dispostatus = DispositionStatus::select('id', 'name')->get();
-
-            foreach ($dispostatus as $dispo) {
-                $detailarr["today"][$dispo->name] = Disposition::where('user_id', $id)
-                    ->where('status_id', $dispo->id)->whereBetween('updated_at', [Carbon::today(), Carbon::today()->endOfDay()])
-                    ->count();
-
-                $detailarr["yesterday"][$dispo->name] = Disposition::where('user_id', $id)
-                    ->where('status_id', $dispo->id)->whereBetween('updated_at', [Carbon::yesterday(), Carbon::yesterday()->endOfDay()])
-                    ->count();
-            }
-
-            // get all target of this month of user from Target table and count percentage of target achieved by user
-            $targetCount = Target::where('user_id', $id)->where('time', strtoupper(date('M-Y')))->count();
-
-            if ($targetCount > 0) {
-                $target = Target::where('user_id', $id)->where('time', strtoupper(date('M-Y')))->get();
-
-                $targetValue = $target[0]->target_value;
-
-                $targetAchieved = $target[0]->target_achieved;
-
-                // count percentage of target achieved by user
-                if (!empty($target) && isset($target[0]) && $targetValue > 0) {
-                    $target_percentage = round(($target[0]->target_achieved / $targetValue) * 100, 2);
-                    // $target_achieved = $target[0]->target_achieved ?? 0; // Ensure target_achieved exists
-                    // $target_percentage = $targetValue > 0
-                    //     ? round(($target_achieved / $targetValue) * 100, 2)
-                    //     : 0; // Prevent division by zero
+                    $target[0]->name = $userdetail->name;
                 } else {
                     $target_percentage = 0;
+                    $targetValue = 0;
+                    $targetAchieved = 0;
+                    $target[] = [
+                        "ID" => "",
+                        "user_id" => $id,
+                        "name" => $userdetail->name,
+                        "time" => date('M-Y'),
+                        "target_achieved" => 0,
+                        "target_value" => 0,
+                        "created_at" => "2024-10-15T17:52:17.000000Z",
+                        "updated_at" => "2024-10-15T17:53:02.000000Z"
+                    ];
                 }
 
-                // add username to target
-                $target[0]->name = $userdetail->name;
+                $today = \Carbon\Carbon::today()->toDateString();
 
-            } else {
-                $target_percentage = 0;
-                $targetValue = 0;
-                $targetAchieved = 0;
-                $target[] = [
-                    "ID" => "",
-                    "user_id" => $id,
-                    "name" => $userdetail->name,
-                    "time" => date('M-Y'),
-                    "target_achieved" => 0,
-                    "target_value" => 0,
-                    "created_at" => "2024-10-15T17:52:17.000000Z",
-                    "updated_at" => "2024-10-15T17:53:02.000000Z"
+                $events = \App\Models\Calendar::select(
+                    "calendars.id as id",
+                    "calendars.title as title",
+                    "calendars.start_date as start_date",
+                    "calendars.end_date as end_date",
+                    "calendars.description as description",
+                    "calendars.repeat_rule as repeat_rule",
+                    "calendars.all_day as all_day",
+                    "calendars.timezone as timezone",
+                    "calendars.id as company_id",
+                    "users.name as user_name",
+                    "users.id as userid",
+                    'companies.name as company_name',
+                )
+                    ->join('users', 'users.id', '=', 'calendars.created_by')
+                    ->join('companies', 'companies.id', '=', 'calendars.company_id')
+                    ->where('calendars.created_by', $id)
+                    ->where(function ($query) use ($today) {
+                        $query->whereDate('calendars.start_date', $today)
+                            ->orWhereDate('calendars.end_date', $today);
+                    })
+                    ->get();
+
+                $detail = [
+                    'name' => $userdetail->name,
+                    'user_id' => $id,
+                    'total_call_made' => $totalcalls,
+                    'total_zoom_calls' => $totalZoomCalls,
+                    'today_call_made' => $calltoday,
+                    'totalassigned' => $totalassignuser,
+                    'detail_report' => $detailarr,
+                    'target_percentage' => $target_percentage,
+                    'target_value' => $targetValue,
+                    'target_achieved' => $targetAchieved,
+                    'target_month' => $target[0]->time ?? strtoupper(\Carbon\Carbon::now()->format('M-Y')),
+                    'today_events' => $events,
+                    'targets' => $target,
                 ];
             }
 
-            $today = Carbon::today()->toDateString();
+            $filter = $request->filter ?? 'life_time';
+            list($currentStart, $currentEnd, $prevStart, $prevEnd) = $this->getDateRangeForFilter($filter, $request);
+            $saleStatusId = \App\Models\DispositionStatus::where('name', 'Sale')->first()->id;
 
-            $events = Calendar::select(
-                "calendars.id as id",
-                "calendars.title as title",
-                "calendars.start_date as start_date",
-                "calendars.end_date as end_date",
-                "calendars.description as description",
-                "calendars.repeat_rule as repeat_rule",
-                "calendars.all_day as all_day",
-                "calendars.timezone as timezone",
-                "calendars.id as company_id",
-                "users.name as user_name",
-                "users.id as userid",
-                'companies.name as company_name',
-            )
-                ->join('users', 'users.id', '=', 'calendars.created_by')
-                ->join('companies', 'companies.id', '=', 'calendars.company_id')
-                ->where('calendars.created_by', $id)
-                ->where(function ($query) use ($today) {
-                    $query->whereDate('calendars.start_date', $today)
-                        ->orWhereDate('calendars.end_date', $today);
-                })
-                ->get();
-
-            $detail = [
-                'name' => $userdetail->name,
-                'user_id' => $id,
-                'total_call_made' => $totalcalls,
-                'total_zoom_calls' => $totalZoomCalls,
-                'today_call_made' => $calltoday,
-                'totalassigned' => $totalassignuser,
-                'detail_report' => $detailarr,
-                'target_percentage' => $target_percentage,
-                'target_value' => $targetValue,
-                'target_achieved' => $targetAchieved,
-                'target_month' => $target[0]->time ?? strtoupper(Carbon::now()->format('M-Y')),
-                'today_events' => $events,
-                'targets' => $target,
-            ];
-        }
-
-        $filter = $request->filter ?? 'life_time';
-        list($currentStart, $currentEnd, $prevStart, $prevEnd) = $this->getDateRangeForFilter($filter, $request);
-
-        $analyticsFilter = $request->analytics_filter ?? 'this_month';
-        list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
-
-        $isAdmin = $rolesarr->contains('Admin') || $rolesarr->contains('Super Admin');
-        if ($isAdmin) {
+            $isAdmin = $rolesarr->contains('Admin') || $rolesarr->contains('Super Admin');
             $userIdList = [];
-        } elseif (isset($userdetail) && $userdetail instanceof \Illuminate\Support\Collection) {
-            $userIdList = $userdetail->pluck('userid')->toArray();
-        } else {
-            $userIdList = [$id];
-        }
-
-        // 1. Daily Analytics for Area Chart (uses analyticsFilter dates)
-        $dailyDispositionsQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
-            ->groupBy('date');
-        
-        $dailyZoomCallsQuery = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
-            ->whereBetween('start_time', [$analyticsStart, $analyticsEnd])
-            ->groupBy('date');
-
-        $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
-        $dailySalesQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->where('status_id', $saleStatusId)
-            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
-            ->groupBy('date');
-
-        if (!$isAdmin) {
-            $dailyDispositionsQuery->whereIn('user_id', $userIdList);
-            $dailyZoomCallsQuery->whereIn('user_id', $userIdList);
-            $dailySalesQuery->whereIn('user_id', $userIdList);
-        }
-
-        $dailyDispositions = $dailyDispositionsQuery->pluck('total', 'date');
-        $dailyZoomCalls = $dailyZoomCallsQuery->pluck('total', 'date');
-        $dailySales = $dailySalesQuery->pluck('total', 'date');
-
-        $analyticsOverview = [];
-        $currentDate = $analyticsStart->copy();
-        $diffDays = $analyticsStart->diffInDays($analyticsEnd);
-        
-        if ($diffDays > 60) {
-            // Group by Month if period > 60 days
-            $currentMonth = $analyticsStart->copy()->startOfMonth();
-            while ($currentMonth <= $analyticsEnd) {
-                $monthStr = $currentMonth->format('Y-m');
-                
-                $crmCalls = 0;
-                $zoomCalls = 0;
-                $salesCount = 0;
-                
-                // Sum daily values for the month
-                $monthEnd = $currentMonth->copy()->endOfMonth();
-                $tempDate = $currentMonth->copy();
-                while ($tempDate <= min($monthEnd, $analyticsEnd)) {
-                    $dateStr = $tempDate->toDateString();
-                    $crmCalls += $dailyDispositions->get($dateStr, 0);
-                    $zoomCalls += $dailyZoomCalls->get($dateStr, 0);
-                    $salesCount += $dailySales->get($dateStr, 0);
-                    $tempDate->addDay();
+            if (!$isAdmin) {
+                if (isset($userdetail) && $userdetail instanceof \Illuminate\Support\Collection) {
+                    $userIdList = $userdetail->pluck('userid')->toArray();
+                } else {
+                    $userIdList = [$id];
                 }
-                
-                $analyticsOverview[] = [
-                    'date' => $currentMonth->format('M Y'),
-                    'zoom_calls' => $zoomCalls, 
-                    'crm_calls' => $crmCalls,
-                    'total_calls' => $zoomCalls + $crmCalls,
-                    'sales' => $salesCount
-                ];
-                $currentMonth->addMonth();
             }
-        } else {
-            // Group by Day
-            while ($currentDate <= min(Carbon::today(), $analyticsEnd)) {
-                $dateStr = $currentDate->toDateString();
-                $crmCalls = $dailyDispositions->get($dateStr, 0);
-                $zoomCalls = $dailyZoomCalls->get($dateStr, 0);
+
+            // Generate independent Sparkline data for Top KPI Cards (using $filter dates)
+            $kpiDailyDispositionsQuery = \App\Models\Disposition::select(\DB::raw('DATE(updated_at) as date'), \DB::raw('COUNT(*) as total'))
+                ->whereBetween('updated_at', [$currentStart, $currentEnd])
+                ->groupBy('date');
+
+            $kpiDailyZoomCallsQuery = \App\Models\CallLog::select(\DB::raw('DATE(start_time) as date'), \DB::raw('COUNT(DISTINCT caller_number) as total'))
+                ->whereBetween('start_time', [$currentStart, $currentEnd])
+                ->groupBy('date');
                 
-                $analyticsOverview[] = [
-                    'date' => $currentDate->format('M d'),
-                    'zoom_calls' => $zoomCalls, 
-                    'crm_calls' => $crmCalls,
-                    'total_calls' => $zoomCalls + $crmCalls,
-                    'sales' => $dailySales->get($dateStr, 0)
-                ];
-                $currentDate->addDay();
+            $kpiDailySalesQuery = \App\Models\Disposition::select(\DB::raw('DATE(updated_at) as date'), \DB::raw('COUNT(*) as total'))
+                ->where('status_id', $saleStatusId)
+                ->whereBetween('updated_at', [$currentStart, $currentEnd])
+                ->groupBy('date');
+
+            if (!$isAdmin) {
+                $kpiDailyDispositionsQuery->whereIn('user_id', $userIdList);
+                $kpiDailyZoomCallsQuery->whereIn('user_id', $userIdList);
+                $kpiDailySalesQuery->whereIn('user_id', $userIdList);
             }
-        }
 
-        // Generate independent Sparkline data for Top KPI Cards (using $filter dates)
-        $kpiDailyDispositionsQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->whereBetween('updated_at', [$currentStart, $currentEnd])
-            ->groupBy('date');
+            $kpiDailyDispositions = $kpiDailyDispositionsQuery->pluck('total', 'date');
+            $kpiDailyZoomCalls = $kpiDailyZoomCallsQuery->pluck('total', 'date');
+            $kpiDailySales = $kpiDailySalesQuery->pluck('total', 'date');
 
-        $kpiDailyZoomCallsQuery = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
-            ->whereBetween('start_time', [$currentStart, $currentEnd])
-            ->groupBy('date');
+            $kpiSparklineData = [];
+            $kpiCurrentDate = $currentStart->copy();
+            $kpiDiffDays = $currentStart->diffInDays($currentEnd);
             
-        $kpiDailySalesQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->where('status_id', $saleStatusId)
-            ->whereBetween('updated_at', [$currentStart, $currentEnd])
-            ->groupBy('date');
-
-        if (!$isAdmin) {
-            $kpiDailyDispositionsQuery->whereIn('user_id', $userIdList);
-            $kpiDailyZoomCallsQuery->whereIn('user_id', $userIdList);
-            $kpiDailySalesQuery->whereIn('user_id', $userIdList);
-        }
-
-        $kpiDailyDispositions = $kpiDailyDispositionsQuery->pluck('total', 'date');
-        $kpiDailyZoomCalls = $kpiDailyZoomCallsQuery->pluck('total', 'date');
-        $kpiDailySales = $kpiDailySalesQuery->pluck('total', 'date');
-
-        $kpiSparklineData = [];
-        $kpiCurrentDate = $currentStart->copy();
-        $kpiDiffDays = $currentStart->diffInDays($currentEnd);
-        
-        if ($kpiDiffDays > 60) {
-            $kpiCurrentMonth = $currentStart->copy()->startOfMonth();
-            while ($kpiCurrentMonth <= $currentEnd) {
-                $crmCalls = 0; $zoomCalls = 0; $salesCount = 0;
-                $monthEnd = $kpiCurrentMonth->copy()->endOfMonth();
-                $tempDate = $kpiCurrentMonth->copy();
-                while ($tempDate <= min($monthEnd, $currentEnd)) {
-                    $dateStr = $tempDate->toDateString();
-                    $crmCalls += $kpiDailyDispositions->get($dateStr, 0);
-                    $zoomCalls += $kpiDailyZoomCalls->get($dateStr, 0);
-                    $salesCount += $kpiDailySales->get($dateStr, 0);
-                    $tempDate->addDay();
+            if ($kpiDiffDays > 60) {
+                $kpiCurrentMonth = $currentStart->copy()->startOfMonth();
+                while ($kpiCurrentMonth <= $currentEnd) {
+                    $crmCalls = 0; $zoomCalls = 0; $salesCount = 0;
+                    $monthEnd = $kpiCurrentMonth->copy()->endOfMonth();
+                    $tempDate = $kpiCurrentMonth->copy();
+                    while ($tempDate <= min($monthEnd, $currentEnd)) {
+                        $dateStr = $tempDate->toDateString();
+                        $crmCalls += $kpiDailyDispositions->get($dateStr, 0);
+                        $zoomCalls += $kpiDailyZoomCalls->get($dateStr, 0);
+                        $salesCount += $kpiDailySales->get($dateStr, 0);
+                        $tempDate->addDay();
+                    }
+                    
+                    $kpiSparklineData[] = [
+                        'date' => $kpiCurrentMonth->format('M Y'),
+                        'total_calls' => $zoomCalls + $crmCalls,
+                        'zoom_calls' => $zoomCalls,
+                        'sales' => $salesCount
+                    ];
+                    $kpiCurrentMonth->addMonth();
                 }
-                
-                $kpiSparklineData[] = [
-                    'date' => $kpiCurrentMonth->format('M Y'),
-                    'total_calls' => $zoomCalls + $crmCalls,
-                    'sales' => $salesCount
-                ];
-                $kpiCurrentMonth->addMonth();
+            } else {
+                while ($kpiCurrentDate <= min(\Carbon\Carbon::today(), $currentEnd)) {
+                    $dateStr = $kpiCurrentDate->toDateString();
+                    $crmCalls = $kpiDailyDispositions->get($dateStr, 0);
+                    $zoomCalls = $kpiDailyZoomCalls->get($dateStr, 0);
+                    
+                    $kpiSparklineData[] = [
+                        'date' => $kpiCurrentDate->format('M d'),
+                        'total_calls' => $zoomCalls + $crmCalls,
+                        'zoom_calls' => $zoomCalls,
+                        'sales' => $kpiDailySales->get($dateStr, 0)
+                    ];
+                    $kpiCurrentDate->addDay();
+                }
             }
-        } else {
-            while ($kpiCurrentDate <= min(Carbon::today(), $currentEnd)) {
-                $dateStr = $kpiCurrentDate->toDateString();
-                $crmCalls = $kpiDailyDispositions->get($dateStr, 0);
-                $zoomCalls = $kpiDailyZoomCalls->get($dateStr, 0);
-                
-                $kpiSparklineData[] = [
-                    'date' => $kpiCurrentDate->format('M d'),
-                    'total_calls' => $zoomCalls + $crmCalls,
-                    'sales' => $kpiDailySales->get($dateStr, 0)
-                ];
-                $kpiCurrentDate->addDay();
+
+            // 2. Trends for KPI Cards
+            $thisPeriodSalesQuery = \App\Models\Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$currentStart, $currentEnd]);
+            $prevPeriodSalesQuery = \App\Models\Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$prevStart, $prevEnd]);
+            $thisPeriodZoomQuery = \App\Models\CallLog::whereBetween('start_time', [$currentStart, $currentEnd]);
+            $prevPeriodZoomQuery = \App\Models\CallLog::whereBetween('start_time', [$prevStart, $prevEnd]);
+            $thisPeriodCrmQuery = \App\Models\Disposition::whereBetween('updated_at', [$currentStart, $currentEnd]);
+            $prevPeriodCrmQuery = \App\Models\Disposition::whereBetween('updated_at', [$prevStart, $prevEnd]);
+
+            if (!$isAdmin) {
+                $thisPeriodSalesQuery->whereIn('user_id', $userIdList);
+                $prevPeriodSalesQuery->whereIn('user_id', $userIdList);
+                $thisPeriodZoomQuery->whereIn('user_id', $userIdList);
+                $prevPeriodZoomQuery->whereIn('user_id', $userIdList);
+                $thisPeriodCrmQuery->whereIn('user_id', $userIdList);
+                $prevPeriodCrmQuery->whereIn('user_id', $userIdList);
             }
-        }
 
-        // 2. Trends for KPI Cards
-        $thisPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$currentStart, $currentEnd]);
-        $prevPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$prevStart, $prevEnd]);
-        $thisPeriodZoomQuery = CallLog::whereBetween('start_time', [$currentStart, $currentEnd]);
-        $prevPeriodZoomQuery = CallLog::whereBetween('start_time', [$prevStart, $prevEnd]);
-        $thisPeriodCrmQuery = Disposition::whereBetween('updated_at', [$currentStart, $currentEnd]);
-        $prevPeriodCrmQuery = Disposition::whereBetween('updated_at', [$prevStart, $prevEnd]);
+            $thisPeriodSales = $thisPeriodSalesQuery->count();
+            $prevPeriodSales = $prevStart ? $prevPeriodSalesQuery->count() : 0;
+            $salesTrend = $prevStart ? ($prevPeriodSales > 0 ? round((($thisPeriodSales - $prevPeriodSales) / $prevPeriodSales) * 100, 1) : ($thisPeriodSales > 0 ? 100 : 0)) : null;
+            
+            $thisPeriodZoom = $thisPeriodZoomQuery->distinct('caller_number')->count();
+            $prevPeriodZoom = $prevStart ? $prevPeriodZoomQuery->distinct('caller_number')->count() : 0;
+            $zoomTrend = $prevStart ? ($prevPeriodZoom > 0 ? round((($thisPeriodZoom - $prevPeriodZoom) / $prevPeriodZoom) * 100, 1) : ($thisPeriodZoom > 0 ? 100 : 0)) : null;
 
-        if (!$isAdmin) {
-            $thisPeriodSalesQuery->whereIn('user_id', $userIdList);
-            $prevPeriodSalesQuery->whereIn('user_id', $userIdList);
-            $thisPeriodZoomQuery->whereIn('user_id', $userIdList);
-            $prevPeriodZoomQuery->whereIn('user_id', $userIdList);
-            $thisPeriodCrmQuery->whereIn('user_id', $userIdList);
-            $prevPeriodCrmQuery->whereIn('user_id', $userIdList);
-        }
+            $thisPeriodCrm = $thisPeriodCrmQuery->count();
+            $prevPeriodCrm = $prevStart ? $prevPeriodCrmQuery->count() : 0;
+            
+            $crmTrend = $prevStart ? ($prevPeriodCrm > 0 ? round((($thisPeriodCrm - $prevPeriodCrm) / $prevPeriodCrm) * 100, 1) : ($thisPeriodCrm > 0 ? 100 : 0)) : null;
+            
+            $thisPeriodTotalCalls = $thisPeriodZoom + $thisPeriodCrm;
+            $prevPeriodTotalCalls = $prevPeriodZoom + $prevPeriodCrm;
+            $totalCallsTrend = $prevStart ? ($prevPeriodTotalCalls > 0 ? round((($thisPeriodTotalCalls - $prevPeriodTotalCalls) / $prevPeriodTotalCalls) * 100, 1) : ($thisPeriodTotalCalls > 0 ? 100 : 0)) : null;
+            
+            $thisPeriodAssign = \App\Models\AssignCompanies::distinct('company_id')
+                ->where('assign_by', $id)->where('is_active', 1)
+                ->whereBetween('created_at', [$currentStart, $currentEnd])->count();
+            $prevPeriodAssign = $prevStart ? \App\Models\AssignCompanies::distinct('company_id')
+                ->where('assign_by', $id)->where('is_active', 1)
+                ->whereBetween('created_at', [$prevStart, $prevEnd])->count() : 0;
+            
+            $assignTrend = $prevStart ? ($prevPeriodAssign > 0 ? round((($thisPeriodAssign - $prevPeriodAssign) / $prevPeriodAssign) * 100, 1) : ($thisPeriodAssign > 0 ? 100 : 0)) : null;
 
-        $thisPeriodSales = $thisPeriodSalesQuery->count();
-        $prevPeriodSales = $prevStart ? $prevPeriodSalesQuery->count() : 0;
-        $salesTrend = $prevStart ? ($prevPeriodSales > 0 ? round((($thisPeriodSales - $prevPeriodSales) / $prevPeriodSales) * 100, 1) : ($thisPeriodSales > 0 ? 100 : 0)) : null;
-        
-        $thisPeriodZoom = $thisPeriodZoomQuery->distinct('caller_number')->count();
-        $prevPeriodZoom = $prevStart ? $prevPeriodZoomQuery->distinct('caller_number')->count() : 0;
-        $zoomTrend = $prevStart ? ($prevPeriodZoom > 0 ? round((($thisPeriodZoom - $prevPeriodZoom) / $prevPeriodZoom) * 100, 1) : ($thisPeriodZoom > 0 ? 100 : 0)) : null;
+            $thisPeriodCompany = \App\Models\Company::whereBetween('created_at', [$currentStart, $currentEnd])->count();
+            $prevPeriodCompany = $prevStart ? \App\Models\Company::whereBetween('created_at', [$prevStart, $prevEnd])->count() : 0;
+            
+            $thisPeriodUnassigned = max(0, $thisPeriodCompany - $thisPeriodAssign);
+            $prevPeriodUnassigned = max(0, $prevPeriodCompany - $prevPeriodAssign);
+            $unassignedTrend = $prevStart ? ($prevPeriodUnassigned > 0 ? round((($thisPeriodUnassigned - $prevPeriodUnassigned) / $prevPeriodUnassigned) * 100, 1) : ($thisPeriodUnassigned > 0 ? 100 : 0)) : null;
 
-        $thisPeriodCrm = $thisPeriodCrmQuery->count();
-        $prevPeriodCrm = $prevStart ? $prevPeriodCrmQuery->count() : 0;
-        
-        $crmTrend = $prevStart ? ($prevPeriodCrm > 0 ? round((($thisPeriodCrm - $prevPeriodCrm) / $prevPeriodCrm) * 100, 1) : ($thisPeriodCrm > 0 ? 100 : 0)) : null;
-        
-        $thisPeriodTotalCalls = $thisPeriodZoom + $thisPeriodCrm;
-        $prevPeriodTotalCalls = $prevPeriodZoom + $prevPeriodCrm;
-        $totalCallsTrend = $prevStart ? ($prevPeriodTotalCalls > 0 ? round((($thisPeriodTotalCalls - $prevPeriodTotalCalls) / $prevPeriodTotalCalls) * 100, 1) : ($thisPeriodTotalCalls > 0 ? 100 : 0)) : null;
-        
-        $thisPeriodAssign = AssignCompanies::distinct('company_id')
-            ->where('assign_by', $id)->where('is_active', 1)
-            ->whereBetween('created_at', [$currentStart, $currentEnd])->count();
-        $prevPeriodAssign = $prevStart ? AssignCompanies::distinct('company_id')
-            ->where('assign_by', $id)->where('is_active', 1)
-            ->whereBetween('created_at', [$prevStart, $prevEnd])->count() : 0;
-        
-        $assignTrend = $prevStart ? ($prevPeriodAssign > 0 ? round((($thisPeriodAssign - $prevPeriodAssign) / $prevPeriodAssign) * 100, 1) : ($thisPeriodAssign > 0 ? 100 : 0)) : null;
+            $detail['kpiSparklineData'] = $kpiSparklineData;
+            $trendLabelMap = [
+                'today' => 'vs yesterday',
+                'yesterday' => 'vs previous day',
+                'last_week' => 'vs previous week',
+                'this_month' => 'vs last month',
+                'last_month' => 'vs previous month',
+                'this_year' => 'vs last year',
+                'custom' => 'vs previous period',
+                'life_time' => ''
+            ];
+            
+            $detail['trends'] = [
+                'sales' => $salesTrend,
+                'zoom' => $zoomTrend,
+                'total' => $totalCallsTrend,
+                'assigned' => $assignTrend,
+                'unassigned' => $unassignedTrend,
+                'label' => $trendLabelMap[$filter] ?? 'vs previous'
+            ];
 
-        $thisPeriodCompany = Company::whereBetween('created_at', [$currentStart, $currentEnd])->count();
-        $prevPeriodCompany = $prevStart ? Company::whereBetween('created_at', [$prevStart, $prevEnd])->count() : 0;
-        
-        $thisPeriodUnassigned = max(0, $thisPeriodCompany - $thisPeriodAssign);
-        $prevPeriodUnassigned = max(0, $prevPeriodCompany - $prevPeriodAssign);
-        $unassignedTrend = $prevStart ? ($prevPeriodUnassigned > 0 ? round((($thisPeriodUnassigned - $prevPeriodUnassigned) / $prevPeriodUnassigned) * 100, 1) : ($thisPeriodUnassigned > 0 ? 100 : 0)) : null;
+            return $detail;
+        };
 
-        // Analytics Overview Trends
-        $analyticsThisPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$analyticsStart, $analyticsEnd]);
-        $analyticsPrevPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd]);
-        $analyticsThisPeriodZoomQuery = CallLog::whereBetween('start_time', [$analyticsStart, $analyticsEnd]);
-        $analyticsPrevPeriodZoomQuery = CallLog::whereBetween('start_time', [$analyticsPrevStart, $analyticsPrevEnd]);
-        $analyticsThisPeriodCrmQuery = Disposition::whereBetween('updated_at', [$analyticsStart, $analyticsEnd]);
-        $analyticsPrevPeriodCrmQuery = Disposition::whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd]);
+        $analyticsOverviewClosure = function () use ($request, $id, $rolesarr) {
+            $analyticsFilter = $request->analytics_filter ?? 'this_month';
+            list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
+            $saleStatusId = \App\Models\DispositionStatus::where('name', 'Sale')->first()->id;
 
-        if (!$isAdmin) {
-            $analyticsThisPeriodSalesQuery->whereIn('user_id', $userIdList);
-            $analyticsPrevPeriodSalesQuery->whereIn('user_id', $userIdList);
-            $analyticsThisPeriodZoomQuery->whereIn('user_id', $userIdList);
-            $analyticsPrevPeriodZoomQuery->whereIn('user_id', $userIdList);
-            $analyticsThisPeriodCrmQuery->whereIn('user_id', $userIdList);
-            $analyticsPrevPeriodCrmQuery->whereIn('user_id', $userIdList);
-        }
+            $isAdmin = $rolesarr->contains('Admin') || $rolesarr->contains('Super Admin');
+            $userIdList = [];
+            if (!$isAdmin) {
+                if ($rolesarr->contains('Business Development Manager')) {
+                    $userdetail = \App\Models\User::select('users.id as userid')
+                        ->join('model_has_roles', 'model_has_roles.model_id', '=', 'users.id')
+                        ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                        ->where('users.reporting_authority_id', $id)
+                        ->where('users.is_active', 1)
+                        ->whereIn('roles.name', ['Sales Executives', 'Business Development Team Lead'])
+                        ->get();
+                    $userIdList = $userdetail->pluck('userid')->toArray();
+                } else {
+                    $userIdList = [$id];
+                }
+            }
 
-        $analyticsThisPeriodSales = $analyticsThisPeriodSalesQuery->count();
-        $analyticsPrevPeriodSales = $analyticsPrevStart ? $analyticsPrevPeriodSalesQuery->count() : 0;
-        $analyticsSalesTrend = $analyticsPrevStart ? ($analyticsPrevPeriodSales > 0 ? round((($analyticsThisPeriodSales - $analyticsPrevPeriodSales) / $analyticsPrevPeriodSales) * 100, 1) : ($analyticsThisPeriodSales > 0 ? 100 : 0)) : null;
-        
-        $analyticsThisPeriodZoom = $analyticsThisPeriodZoomQuery->distinct('caller_number')->count();
-        $analyticsPrevPeriodZoom = $analyticsPrevStart ? $analyticsPrevPeriodZoomQuery->distinct('caller_number')->count() : 0;
-        $analyticsZoomTrend = $analyticsPrevStart ? ($analyticsPrevPeriodZoom > 0 ? round((($analyticsThisPeriodZoom - $analyticsPrevPeriodZoom) / $analyticsPrevPeriodZoom) * 100, 1) : ($analyticsThisPeriodZoom > 0 ? 100 : 0)) : null;
+            // 1. Daily Analytics for Area Chart
+            $dailyDispositionsQuery = \App\Models\Disposition::select(\DB::raw('DATE(updated_at) as date'), \DB::raw('COUNT(*) as total'))
+                ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
+                ->groupBy('date');
+            
+            $dailyZoomCallsQuery = \App\Models\CallLog::select(\DB::raw('DATE(start_time) as date'), \DB::raw('COUNT(DISTINCT caller_number) as total'))
+                ->whereBetween('start_time', [$analyticsStart, $analyticsEnd])
+                ->groupBy('date');
 
-        $analyticsThisPeriodCrm = $analyticsThisPeriodCrmQuery->count();
-        $analyticsPrevPeriodCrm = $analyticsPrevStart ? $analyticsPrevPeriodCrmQuery->count() : 0;
-        
-        $analyticsCrmTrend = $analyticsPrevStart ? ($analyticsPrevPeriodCrm > 0 ? round((($analyticsThisPeriodCrm - $analyticsPrevPeriodCrm) / $analyticsPrevPeriodCrm) * 100, 1) : ($analyticsThisPeriodCrm > 0 ? 100 : 0)) : null;
-        
-        $analyticsThisPeriodTotalCalls = $analyticsThisPeriodZoom + $analyticsThisPeriodCrm;
-        $analyticsPrevPeriodTotalCalls = $analyticsPrevPeriodZoom + $analyticsPrevPeriodCrm;
-        $analyticsTotalCallsTrend = $analyticsPrevStart ? ($analyticsPrevPeriodTotalCalls > 0 ? round((($analyticsThisPeriodTotalCalls - $analyticsPrevPeriodTotalCalls) / $analyticsPrevPeriodTotalCalls) * 100, 1) : ($analyticsThisPeriodTotalCalls > 0 ? 100 : 0)) : null;
+            $dailySalesQuery = \App\Models\Disposition::select(\DB::raw('DATE(updated_at) as date'), \DB::raw('COUNT(*) as total'))
+                ->where('status_id', $saleStatusId)
+                ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
+                ->groupBy('date');
 
-        $detail['analyticsOverview'] = [
-            'dailyData' => $analyticsOverview,
-            'trends' => [
-                'sales' => $analyticsSalesTrend,
-                'zoom' => $analyticsZoomTrend,
-                'crm' => $analyticsCrmTrend,
-                'total' => $analyticsTotalCallsTrend
-            ]
-        ];
-        $detail['kpiSparklineData'] = $kpiSparklineData;
-        $trendLabelMap = [
-            'today' => 'vs yesterday',
-            'yesterday' => 'vs previous day',
-            'last_week' => 'vs previous week',
-            'this_month' => 'vs last month',
-            'last_month' => 'vs previous month',
-            'this_year' => 'vs last year',
-            'custom' => 'vs previous period',
-            'life_time' => ''
-        ];
-        
-        $detail['trends'] = [
-            'sales' => $salesTrend,
-            'assigned' => $assignTrend,
-            'unassigned' => $unassignedTrend,
-            'label' => $trendLabelMap[$filter] ?? 'vs previous'
-        ];
+            if (!$isAdmin) {
+                $dailyDispositionsQuery->whereIn('user_id', $userIdList);
+                $dailyZoomCallsQuery->whereIn('user_id', $userIdList);
+                $dailySalesQuery->whereIn('user_id', $userIdList);
+            }
 
-        return Inertia::render('Dashboard', ['detail' => $detail, 'reportData' => $reportData ?? []]);
-    }
+            $dailyDispositions = $dailyDispositionsQuery->pluck('total', 'date');
+            $dailyZoomCalls = $dailyZoomCallsQuery->pluck('total', 'date');
+            $dailySales = $dailySalesQuery->pluck('total', 'date');
 
-    public function getReportData(Request $request)
+            $analyticsOverview = [];
+            $currentDate = $analyticsStart->copy();
+            $diffDays = $analyticsStart->diffInDays($analyticsEnd);
+            
+            if ($diffDays > 60) {
+                $currentMonth = $analyticsStart->copy()->startOfMonth();
+                while ($currentMonth <= $analyticsEnd) {
+                    $monthStr = $currentMonth->format('Y-m');
+                    $crmCalls = 0; $zoomCalls = 0; $salesCount = 0;
+                    
+                    $monthEnd = $currentMonth->copy()->endOfMonth();
+                    $tempDate = $currentMonth->copy();
+                    while ($tempDate <= min($monthEnd, $analyticsEnd)) {
+                        $dateStr = $tempDate->toDateString();
+                        $crmCalls += $dailyDispositions->get($dateStr, 0);
+                        $zoomCalls += $dailyZoomCalls->get($dateStr, 0);
+                        $salesCount += $dailySales->get($dateStr, 0);
+                        $tempDate->addDay();
+                    }
+                    
+                    $analyticsOverview[] = [
+                        'date' => $currentMonth->format('M Y'),
+                        'zoom_calls' => $zoomCalls, 
+                        'crm_calls' => $crmCalls,
+                        'total_calls' => $zoomCalls + $crmCalls,
+                        'sales' => $salesCount
+                    ];
+                    $currentMonth->addMonth();
+                }
+            } else {
+                while ($currentDate <= min(\Carbon\Carbon::today(), $analyticsEnd)) {
+                    $dateStr = $currentDate->toDateString();
+                    $crmCalls = $dailyDispositions->get($dateStr, 0);
+                    $zoomCalls = $dailyZoomCalls->get($dateStr, 0);
+                    
+                    $analyticsOverview[] = [
+                        'date' => $currentDate->format('M d'),
+                        'zoom_calls' => $zoomCalls, 
+                        'crm_calls' => $crmCalls,
+                        'total_calls' => $zoomCalls + $crmCalls,
+                        'sales' => $dailySales->get($dateStr, 0)
+                    ];
+                    $currentDate->addDay();
+                }
+            }
+
+            // Analytics Overview Trends
+            $analyticsThisPeriodSalesQuery = \App\Models\Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$analyticsStart, $analyticsEnd]);
+            $analyticsPrevPeriodSalesQuery = \App\Models\Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd]);
+            $analyticsThisPeriodZoomQuery = \App\Models\CallLog::whereBetween('start_time', [$analyticsStart, $analyticsEnd]);
+            $analyticsPrevPeriodZoomQuery = \App\Models\CallLog::whereBetween('start_time', [$analyticsPrevStart, $analyticsPrevEnd]);
+            $analyticsThisPeriodCrmQuery = \App\Models\Disposition::whereBetween('updated_at', [$analyticsStart, $analyticsEnd]);
+            $analyticsPrevPeriodCrmQuery = \App\Models\Disposition::whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd]);
+
+            if (!$isAdmin) {
+                $analyticsThisPeriodSalesQuery->whereIn('user_id', $userIdList);
+                $analyticsPrevPeriodSalesQuery->whereIn('user_id', $userIdList);
+                $analyticsThisPeriodZoomQuery->whereIn('user_id', $userIdList);
+                $analyticsPrevPeriodZoomQuery->whereIn('user_id', $userIdList);
+                $analyticsThisPeriodCrmQuery->whereIn('user_id', $userIdList);
+                $analyticsPrevPeriodCrmQuery->whereIn('user_id', $userIdList);
+            }
+
+            $analyticsThisPeriodSales = $analyticsThisPeriodSalesQuery->count();
+            $analyticsPrevPeriodSales = $analyticsPrevStart ? $analyticsPrevPeriodSalesQuery->count() : 0;
+            $analyticsSalesTrend = $analyticsPrevStart ? ($analyticsPrevPeriodSales > 0 ? round((($analyticsThisPeriodSales - $analyticsPrevPeriodSales) / $analyticsPrevPeriodSales) * 100, 1) : ($analyticsThisPeriodSales > 0 ? 100 : 0)) : null;
+            
+            $analyticsThisPeriodZoom = $analyticsThisPeriodZoomQuery->distinct('caller_number')->count();
+            $analyticsPrevPeriodZoom = $analyticsPrevStart ? $analyticsPrevPeriodZoomQuery->distinct('caller_number')->count() : 0;
+            $analyticsZoomTrend = $analyticsPrevStart ? ($analyticsPrevPeriodZoom > 0 ? round((($analyticsThisPeriodZoom - $analyticsPrevPeriodZoom) / $analyticsPrevPeriodZoom) * 100, 1) : ($analyticsThisPeriodZoom > 0 ? 100 : 0)) : null;
+
+            $analyticsThisPeriodCrm = $analyticsThisPeriodCrmQuery->count();
+            $analyticsPrevPeriodCrm = $analyticsPrevStart ? $analyticsPrevPeriodCrmQuery->count() : 0;
+            $analyticsCrmTrend = $analyticsPrevStart ? ($analyticsPrevPeriodCrm > 0 ? round((($analyticsThisPeriodCrm - $analyticsPrevPeriodCrm) / $analyticsPrevPeriodCrm) * 100, 1) : ($analyticsThisPeriodCrm > 0 ? 100 : 0)) : null;
+            
+            $analyticsThisPeriodTotalCalls = $analyticsThisPeriodZoom + $analyticsThisPeriodCrm;
+            $analyticsPrevPeriodTotalCalls = $analyticsPrevPeriodZoom + $analyticsPrevPeriodCrm;
+            $analyticsTotalCallsTrend = $analyticsPrevStart ? ($analyticsPrevPeriodTotalCalls > 0 ? round((($analyticsThisPeriodTotalCalls - $analyticsPrevPeriodTotalCalls) / $analyticsPrevPeriodTotalCalls) * 100, 1) : ($analyticsThisPeriodTotalCalls > 0 ? 100 : 0)) : null;
+
+            return [
+                'dailyData' => $analyticsOverview,
+                'trends' => [
+                    'sales' => $analyticsSalesTrend,
+                    'zoom' => $analyticsZoomTrend,
+                    'crm' => $analyticsCrmTrend,
+                    'total' => $analyticsTotalCallsTrend
+                ]
+            ];
+        };
+
+        return Inertia::render('Dashboard', [
+            'detail' => fn () => $detailClosure(),
+            'analyticsOverview' => fn () => $analyticsOverviewClosure(),
+            'reportData' => function () use ($request, $id, $rolesarr) {
+                if (($rolesarr->contains('Admin')) || $rolesarr->contains('Business Development Manager')) {
+                    $managersList = \App\Models\User::select('users.reporting_authority_id', 'managers.name as manager_name')
+                        ->join('users as managers', 'managers.id', '=', 'users.reporting_authority_id')
+                        ->distinct()
+                        ->where('users.reporting_authority_id', '=', \Auth::id())
+                        ->whereNotExists(function ($query) {
+                            $query->select(\DB::raw(1))
+                                ->from('model_has_roles')
+                                ->where('model_has_roles.role_id', '=', 1)
+                                ->whereRaw('model_has_roles.model_id = users.reporting_authority_id');
+                        })
+                        ->get();
+                    if ($rolesarr->contains('Admin')) {
+                        $managersList = \App\Models\User::select('reporting_authority_id', \DB::raw('(SELECT name FROM users as managers WHERE managers.id = users.reporting_authority_id) as manager_name'))
+                            ->distinct()
+                            ->whereNotNull('reporting_authority_id')
+                            ->whereNotExists(function ($query) {
+                                $query->select(\DB::raw(1))
+                                    ->from('model_has_roles')
+                                    ->where('model_has_roles.role_id', '=', 1)
+                                    ->whereRaw('model_has_roles.model_id = users.reporting_authority_id');
+                            })
+                            ->get();
+                    }
+                    return $this->getReportDataManager($managersList);
+                }
+                return [];
+            }
+        ]);
+    }public function getReportData(Request $request)
     {
         // get report data from userid and duration from disposition, disposition_status and users database tables according to the disposition status
         $userid = $request->userid;
