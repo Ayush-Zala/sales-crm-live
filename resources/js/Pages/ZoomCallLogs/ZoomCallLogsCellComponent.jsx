@@ -64,7 +64,10 @@ export default function ZoomCallLogsCellComponent({ row, column }) {
                 )
             );
         case "recording_id":
-            return <ShowCallTranscript recordingId={row.recording_id} />;
+            if (row.recording_id || row.file_url) {
+                return <ShowCallTranscript recordingId={row.recording_id} callId={row.call_id} />;
+            }
+            return null;
         case "call_duration":
             return row.call_duration && formatDuration(row.call_duration);
         case "talk_time":

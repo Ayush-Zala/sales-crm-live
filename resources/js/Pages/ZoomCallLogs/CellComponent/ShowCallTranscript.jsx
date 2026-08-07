@@ -13,7 +13,7 @@ import {
 import { useState } from "react";
 import toast from "react-hot-toast";
 
-const ShowCallTranscript = ({ recordingId }) => {
+const ShowCallTranscript = ({ recordingId, callId }) => {
     const [transcript, setTranscript] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -25,7 +25,7 @@ const ShowCallTranscript = ({ recordingId }) => {
     const handleClick = () => {
         setLoading(true);
 
-        fetch(route("zoom.calltranscript", { recordingId }))
+        fetch(route("zoom.calltranscript", { recordingId: recordingId || 'missing', callId: callId }))
             .then((response) => response.json())
             .then((res) => {
                 if (res.data === null || res.data === "") {
@@ -56,7 +56,7 @@ const ShowCallTranscript = ({ recordingId }) => {
 
     return (
         <>
-            {recordingId ? (
+            {(recordingId || callId) ? (
                 loading ? (
                     <CircularProgress size={18} color="primary" />
                 ) : (

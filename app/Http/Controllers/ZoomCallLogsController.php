@@ -177,6 +177,29 @@ class ZoomCallLogsController extends Controller
         }
 
         $recordingId = $request->recordingId;
+        
+        if ($recordingId === 'missing' && $request->callId) {
+            // Fetch recordingId dynamically
+            $url = 'https://api.zoom.us/v2/phone/call_logs/' . $request->callId . '/recordings';
+            $resp = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $this->newTokenGenerate($zoomUserId),
+                'Content-Type' => 'application/json',
+            ])->get($url);
+            
+            if ($resp->successful()) {
+                $respData = $resp->json();
+                if (isset($respData['id'])) {
+                    $recordingId = str_replace('-', '', $respData['id']);
+                    // Update database
+                    CallLog::where('call_id', $request->callId)->update(['recording_id' => $recordingId]);
+                } else {
+                    return response()->json(['data' => ''], 200);
+                }
+            } else {
+                return response()->json(['data' => ''], 200);
+            }
+        }
+
         $url = 'https://zoom.us/v2/phone/recording_transcript/download/' . $recordingId;
 
         $response = Http::withoutVerifying()->withHeaders([
