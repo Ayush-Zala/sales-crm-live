@@ -538,8 +538,9 @@ class DashboardController extends Controller
         $analyticsFilter = $request->analytics_filter ?? 'this_month';
         list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
 
-        if ($rolesarr->contains('Admin') || $rolesarr->contains('Super Admin')) {
-            $userIdList = User::pluck('id')->toArray();
+        $isAdmin = $rolesarr->contains('Admin') || $rolesarr->contains('Super Admin');
+        if ($isAdmin) {
+            $userIdList = [];
         } elseif (isset($userdetail) && $userdetail instanceof \Illuminate\Support\Collection) {
             $userIdList = $userdetail->pluck('userid')->toArray();
         } else {
@@ -547,25 +548,29 @@ class DashboardController extends Controller
         }
 
         // 1. Daily Analytics for Area Chart (uses analyticsFilter dates)
-        $dailyDispositions = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->whereIn('user_id', $userIdList)
+        $dailyDispositionsQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
             ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
-            ->groupBy('date')
-            ->pluck('total', 'date');
-
-        $dailyZoomCalls = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
-            ->whereIn('user_id', $userIdList)
+            ->groupBy('date');
+        
+        $dailyZoomCallsQuery = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
             ->whereBetween('start_time', [$analyticsStart, $analyticsEnd])
-            ->groupBy('date')
-            ->pluck('total', 'date');
-            
+            ->groupBy('date');
+
         $saleStatusId = DispositionStatus::where('name', 'Sale')->value('id');
-        $dailySales = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->whereIn('user_id', $userIdList)
+        $dailySalesQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
             ->where('status_id', $saleStatusId)
             ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
-            ->groupBy('date')
-            ->pluck('total', 'date');
+            ->groupBy('date');
+
+        if (!$isAdmin) {
+            $dailyDispositionsQuery->whereIn('user_id', $userIdList);
+            $dailyZoomCallsQuery->whereIn('user_id', $userIdList);
+            $dailySalesQuery->whereIn('user_id', $userIdList);
+        }
+
+        $dailyDispositions = $dailyDispositionsQuery->pluck('total', 'date');
+        $dailyZoomCalls = $dailyZoomCallsQuery->pluck('total', 'date');
+        $dailySales = $dailySalesQuery->pluck('total', 'date');
 
         $analyticsOverview = [];
         $currentDate = $analyticsStart->copy();
@@ -620,24 +625,28 @@ class DashboardController extends Controller
         }
 
         // Generate independent Sparkline data for Top KPI Cards (using $filter dates)
-        $kpiDailyDispositions = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->whereIn('user_id', $userIdList)
+        $kpiDailyDispositionsQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
             ->whereBetween('updated_at', [$currentStart, $currentEnd])
-            ->groupBy('date')
-            ->pluck('total', 'date');
+            ->groupBy('date');
 
-        $kpiDailyZoomCalls = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
-            ->whereIn('user_id', $userIdList)
+        $kpiDailyZoomCallsQuery = CallLog::select(DB::raw('DATE(start_time) as date'), DB::raw('COUNT(DISTINCT caller_number) as total'))
             ->whereBetween('start_time', [$currentStart, $currentEnd])
-            ->groupBy('date')
-            ->pluck('total', 'date');
+            ->groupBy('date');
             
-        $kpiDailySales = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
-            ->whereIn('user_id', $userIdList)
+        $kpiDailySalesQuery = Disposition::select(DB::raw('DATE(updated_at) as date'), DB::raw('COUNT(*) as total'))
             ->where('status_id', $saleStatusId)
             ->whereBetween('updated_at', [$currentStart, $currentEnd])
-            ->groupBy('date')
-            ->pluck('total', 'date');
+            ->groupBy('date');
+
+        if (!$isAdmin) {
+            $kpiDailyDispositionsQuery->whereIn('user_id', $userIdList);
+            $kpiDailyZoomCallsQuery->whereIn('user_id', $userIdList);
+            $kpiDailySalesQuery->whereIn('user_id', $userIdList);
+        }
+
+        $kpiDailyDispositions = $kpiDailyDispositionsQuery->pluck('total', 'date');
+        $kpiDailyZoomCalls = $kpiDailyZoomCallsQuery->pluck('total', 'date');
+        $kpiDailySales = $kpiDailySalesQuery->pluck('total', 'date');
 
         $kpiSparklineData = [];
         $kpiCurrentDate = $currentStart->copy();
@@ -680,36 +689,39 @@ class DashboardController extends Controller
         }
 
         // 2. Trends for KPI Cards
-        $thisPeriodSales = Disposition::where('status_id', $saleStatusId)
-            ->whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$currentStart, $currentEnd])
-            ->count();
-        $prevPeriodSales = $prevStart ? Disposition::where('status_id', $saleStatusId)
-            ->whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$prevStart, $prevEnd])
-            ->count() : 0;
+        $thisPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$currentStart, $currentEnd]);
+        $prevPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$prevStart, $prevEnd]);
+        $thisPeriodZoomQuery = CallLog::whereBetween('start_time', [$currentStart, $currentEnd]);
+        $prevPeriodZoomQuery = CallLog::whereBetween('start_time', [$prevStart, $prevEnd]);
+        $thisPeriodCrmQuery = Disposition::whereBetween('updated_at', [$currentStart, $currentEnd]);
+        $prevPeriodCrmQuery = Disposition::whereBetween('updated_at', [$prevStart, $prevEnd]);
+
+        if (!$isAdmin) {
+            $thisPeriodSalesQuery->whereIn('user_id', $userIdList);
+            $prevPeriodSalesQuery->whereIn('user_id', $userIdList);
+            $thisPeriodZoomQuery->whereIn('user_id', $userIdList);
+            $prevPeriodZoomQuery->whereIn('user_id', $userIdList);
+            $thisPeriodCrmQuery->whereIn('user_id', $userIdList);
+            $prevPeriodCrmQuery->whereIn('user_id', $userIdList);
+        }
+
+        $thisPeriodSales = $thisPeriodSalesQuery->count();
+        $prevPeriodSales = $prevStart ? $prevPeriodSalesQuery->count() : 0;
         $salesTrend = $prevStart ? ($prevPeriodSales > 0 ? round((($thisPeriodSales - $prevPeriodSales) / $prevPeriodSales) * 100, 1) : ($thisPeriodSales > 0 ? 100 : 0)) : null;
         
-        $thisPeriodZoom = CallLog::whereIn('user_id', $userIdList)
-            ->whereBetween('start_time', [$currentStart, $currentEnd])
-            ->distinct('caller_number')->count();
-        $prevPeriodZoom = $prevStart ? CallLog::whereIn('user_id', $userIdList)
-            ->whereBetween('start_time', [$prevStart, $prevEnd])
-            ->distinct('caller_number')->count() : 0;
+        $thisPeriodZoom = $thisPeriodZoomQuery->distinct('caller_number')->count();
+        $prevPeriodZoom = $prevStart ? $prevPeriodZoomQuery->distinct('caller_number')->count() : 0;
         $zoomTrend = $prevStart ? ($prevPeriodZoom > 0 ? round((($thisPeriodZoom - $prevPeriodZoom) / $prevPeriodZoom) * 100, 1) : ($thisPeriodZoom > 0 ? 100 : 0)) : null;
 
-        $thisPeriodCrm = Disposition::whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$currentStart, $currentEnd])
-            ->count();
-        $prevPeriodCrm = $prevStart ? Disposition::whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$prevStart, $prevEnd])
-            ->count() : 0;
+        $thisPeriodCrm = $thisPeriodCrmQuery->count();
+        $prevPeriodCrm = $prevStart ? $prevPeriodCrmQuery->count() : 0;
         
         $crmTrend = $prevStart ? ($prevPeriodCrm > 0 ? round((($thisPeriodCrm - $prevPeriodCrm) / $prevPeriodCrm) * 100, 1) : ($thisPeriodCrm > 0 ? 100 : 0)) : null;
         
         $thisPeriodTotalCalls = $thisPeriodZoom + $thisPeriodCrm;
         $prevPeriodTotalCalls = $prevPeriodZoom + $prevPeriodCrm;
         $totalCallsTrend = $prevStart ? ($prevPeriodTotalCalls > 0 ? round((($thisPeriodTotalCalls - $prevPeriodTotalCalls) / $prevPeriodTotalCalls) * 100, 1) : ($thisPeriodTotalCalls > 0 ? 100 : 0)) : null;
+        
         $thisPeriodAssign = AssignCompanies::distinct('company_id')
             ->where('assign_by', $id)->where('is_active', 1)
             ->whereBetween('created_at', [$currentStart, $currentEnd])->count();
@@ -727,30 +739,32 @@ class DashboardController extends Controller
         $unassignedTrend = $prevStart ? ($prevPeriodUnassigned > 0 ? round((($thisPeriodUnassigned - $prevPeriodUnassigned) / $prevPeriodUnassigned) * 100, 1) : ($thisPeriodUnassigned > 0 ? 100 : 0)) : null;
 
         // Analytics Overview Trends
-        $analyticsThisPeriodSales = Disposition::where('status_id', $saleStatusId)
-            ->whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
-            ->count();
-        $analyticsPrevPeriodSales = $analyticsPrevStart ? Disposition::where('status_id', $saleStatusId)
-            ->whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd])
-            ->count() : 0;
+        $analyticsThisPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$analyticsStart, $analyticsEnd]);
+        $analyticsPrevPeriodSalesQuery = Disposition::where('status_id', $saleStatusId)->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd]);
+        $analyticsThisPeriodZoomQuery = CallLog::whereBetween('start_time', [$analyticsStart, $analyticsEnd]);
+        $analyticsPrevPeriodZoomQuery = CallLog::whereBetween('start_time', [$analyticsPrevStart, $analyticsPrevEnd]);
+        $analyticsThisPeriodCrmQuery = Disposition::whereBetween('updated_at', [$analyticsStart, $analyticsEnd]);
+        $analyticsPrevPeriodCrmQuery = Disposition::whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd]);
+
+        if (!$isAdmin) {
+            $analyticsThisPeriodSalesQuery->whereIn('user_id', $userIdList);
+            $analyticsPrevPeriodSalesQuery->whereIn('user_id', $userIdList);
+            $analyticsThisPeriodZoomQuery->whereIn('user_id', $userIdList);
+            $analyticsPrevPeriodZoomQuery->whereIn('user_id', $userIdList);
+            $analyticsThisPeriodCrmQuery->whereIn('user_id', $userIdList);
+            $analyticsPrevPeriodCrmQuery->whereIn('user_id', $userIdList);
+        }
+
+        $analyticsThisPeriodSales = $analyticsThisPeriodSalesQuery->count();
+        $analyticsPrevPeriodSales = $analyticsPrevStart ? $analyticsPrevPeriodSalesQuery->count() : 0;
         $analyticsSalesTrend = $analyticsPrevStart ? ($analyticsPrevPeriodSales > 0 ? round((($analyticsThisPeriodSales - $analyticsPrevPeriodSales) / $analyticsPrevPeriodSales) * 100, 1) : ($analyticsThisPeriodSales > 0 ? 100 : 0)) : null;
         
-        $analyticsThisPeriodZoom = CallLog::whereIn('user_id', $userIdList)
-            ->whereBetween('start_time', [$analyticsStart, $analyticsEnd])
-            ->distinct('caller_number')->count();
-        $analyticsPrevPeriodZoom = $analyticsPrevStart ? CallLog::whereIn('user_id', $userIdList)
-            ->whereBetween('start_time', [$analyticsPrevStart, $analyticsPrevEnd])
-            ->distinct('caller_number')->count() : 0;
+        $analyticsThisPeriodZoom = $analyticsThisPeriodZoomQuery->distinct('caller_number')->count();
+        $analyticsPrevPeriodZoom = $analyticsPrevStart ? $analyticsPrevPeriodZoomQuery->distinct('caller_number')->count() : 0;
         $analyticsZoomTrend = $analyticsPrevStart ? ($analyticsPrevPeriodZoom > 0 ? round((($analyticsThisPeriodZoom - $analyticsPrevPeriodZoom) / $analyticsPrevPeriodZoom) * 100, 1) : ($analyticsThisPeriodZoom > 0 ? 100 : 0)) : null;
 
-        $analyticsThisPeriodCrm = Disposition::whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$analyticsStart, $analyticsEnd])
-            ->count();
-        $analyticsPrevPeriodCrm = $analyticsPrevStart ? Disposition::whereIn('user_id', $userIdList)
-            ->whereBetween('updated_at', [$analyticsPrevStart, $analyticsPrevEnd])
-            ->count() : 0;
+        $analyticsThisPeriodCrm = $analyticsThisPeriodCrmQuery->count();
+        $analyticsPrevPeriodCrm = $analyticsPrevStart ? $analyticsPrevPeriodCrmQuery->count() : 0;
         
         $analyticsCrmTrend = $analyticsPrevStart ? ($analyticsPrevPeriodCrm > 0 ? round((($analyticsThisPeriodCrm - $analyticsPrevPeriodCrm) / $analyticsPrevPeriodCrm) * 100, 1) : ($analyticsThisPeriodCrm > 0 ? 100 : 0)) : null;
         
