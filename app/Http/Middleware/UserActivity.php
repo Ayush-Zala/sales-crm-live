@@ -22,6 +22,16 @@ class UserActivity
             $expiresAt = now()->addMinutes(1); /* keep online for 1 min */
             FacadesCache::put('user-is-online-' . FacadesAuth::user()->id, true, $expiresAt);
 
+            // Check if online count has changed to broadcast update dynamically
+            $currentOnlineCount = \App\Models\Cache::where('key', 'like', 'user-is-online-%')->where('expiration', '>=', time())->count();
+            $lastKnownCount = FacadesCache::get('last-known-online-count', -1);
+            
+            if ($currentOnlineCount !== $lastKnownCount) {
+                FacadesCache::put('last-known-online-count', $currentOnlineCount, now()->addMinutes(10));
+                $totalUsers = \App\Models\User::where('is_active', 1)->count();
+                broadcast(new \App\Events\OnlineUsersUpdated($currentOnlineCount, $totalUsers));
+            }
+
             /* last seen */
             //  User::where('id', FacadesAuth::user()->id)->update(['last_seen' => now()]);
         }
