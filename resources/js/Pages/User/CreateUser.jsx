@@ -24,7 +24,7 @@ import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import { MainContentTemplate } from "@/Layouts/components/main-content-template";
 import { Head } from "@inertiajs/react";
 import { LoadingButton } from "@mui/lab";
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
 
 const defaultValues = {
@@ -51,10 +51,34 @@ const CreateUser = ({
     groupPermissions,
     reportingAuthorities,
 }) => {
-    const { control, handleSubmit, reset } = useForm({
+    const { control, handleSubmit, reset, watch, setValue } = useForm({
         defaultValues,
         resolver: yupResolver(schema),
     });
+
+    const selectedRoleName = watch("roleName");
+    const selectedRole = roles.find((r) => r.name === selectedRoleName);
+    const selectedRolePermissions = selectedRole && selectedRole.permissions 
+        ? selectedRole.permissions.map(p => p.id) 
+        : [];
+        
+    const previousRolePermissions = useRef([]);
+
+    useEffect(() => {
+        // Uncheck previous role permissions (unless they are part of the new role)
+        previousRolePermissions.current.forEach(id => {
+            if (!selectedRolePermissions.includes(id)) {
+                setValue(`permissions.${id}`, false);
+            }
+        });
+
+        // Check new role permissions
+        selectedRolePermissions.forEach(id => {
+            setValue(`permissions.${id}`, true);
+        });
+
+        previousRolePermissions.current = selectedRolePermissions;
+    }, [selectedRolePermissions, setValue]);
 
     const reportingAuthoritiesArray = reportingAuthorities.map((user) => ({
         label: `${user.name} - ${user.role}`,
@@ -67,12 +91,11 @@ const CreateUser = ({
             return acc;
         }, []);
 
+        const allPermissions = groupPermissions.flatMap(g => g.permissions);
         const selectedPermissions = permissionList
             .map((index) => {
-                const permission = groupPermissions.find(
-                    (perm) => perm.permission_id === index
-                );
-                return permission ? permission.permission_name : null;
+                const permission = allPermissions.find((perm) => perm.id === index);
+                return permission ? permission.name : null;
             })
             .filter(Boolean);
 
@@ -114,21 +137,21 @@ const CreateUser = ({
                         onSuccess={handleSubmit(onSubmit)}
                     >
                         <Grid item container xs={12} spacing={2}>
-                            <Grid item xs={12}>
+                            <Grid item xs={12} md={3}>
                                 <TextFieldElement
                                     name="username"
                                     label="Username"
                                     control={control}
                                 />
                             </Grid>
-                            <Grid item xs={12}>
+                            <Grid item xs={12} md={3}>
                                 <TextFieldElement
                                     name="email"
                                     label="Email"
                                     control={control}
                                 />
                             </Grid>
-                            <Grid item xs={12}>
+                            <Grid item xs={12} md={3}>
                                 <TextFieldElement
                                     name="password"
                                     label="Password"
@@ -136,7 +159,7 @@ const CreateUser = ({
                                     type="password"
                                 />
                             </Grid>
-                            <Grid item xs={12}>
+                            <Grid item xs={12} md={3}>
                                 <SelectElement
                                     name="reportingAuthority"
                                     label="Reporting Authorities"
@@ -150,6 +173,7 @@ const CreateUser = ({
                             <PermissionsSection
                                 control={control}
                                 groupPermissions={groupPermissions}
+                                selectedRolePermissions={selectedRolePermissions}
                             />
                             <Grid item xs={12}>
                                 <LoadingButton
@@ -185,38 +209,15 @@ const RolesSection = ({ control, roles }) => {
     );
 };
 
-const PermissionsSection = ({ control, groupPermissions }) => {
-    const groupedData = groupPermissions.reduce((acc, item) => {
-        // Find the group in the accumulator array
-        let group = acc.find((g) => g.group_name === item.group_name);
-
-        // If group doesn't exist, create it and add to the accumulator
-        if (!group) {
-            group = {
-                group_name: item.group_name,
-                permissions: [],
-            };
-            acc.push(group);
-        }
-
-        // Add the current item to the permissions array of the group
-        group.permissions.push({
-            permission_name: item.permission_name,
-            permission_id: item.permission_id,
-            group_id: item.group_id,
-        });
-
-        return acc;
-    }, []);
-
+const PermissionsSection = ({ control, groupPermissions, selectedRolePermissions = [] }) => {
     return (
         <Fragment>
             <Grid item xs={12} mt={3}>
                 <Typography variant="h5">Permissions</Typography>
             </Grid>
             <Grid item container xs={12} columns={12} spacing={1}>
-                {groupedData.map((group, index) => (
-                    <Grid item xs={4} key={index}>
+                {groupPermissions.map((group, index) => (
+                    <Grid item xs={12} md={6} lg={4} key={index}>
                         <Typography
                             variant="h6"
                             fontSize={20}
@@ -232,38 +233,43 @@ const PermissionsSection = ({ control, groupPermissions }) => {
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>Name</TableCell>
-                                        <TableCell>Allow</TableCell>
+                                        <TableCell align="center">Allow</TableCell>
                                     </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                    {group.permissions.map((perm, index) => (
-                                        <TableRow
-                                            key={index}
-                                            sx={{
-                                                "&:last-child td, &:last-child th":
-                                                    {
-                                                        border: 0,
-                                                    },
-                                            }}
-                                        >
-                                            <TableCell
-                                                component="th"
-                                                scope="row"
+                                    {group.permissions.map((perm, pIndex) => {
+                                        const isRolePermission = selectedRolePermissions.includes(perm.id);
+                                        return (
+                                            <TableRow
+                                                key={pIndex}
+                                                sx={{
+                                                    "&:last-child td, &:last-child th":
+                                                        {
+                                                            border: 0,
+                                                        },
+                                                }}
                                             >
-                                                {perm.permission_name}
-                                            </TableCell>
-                                            <TableCell
-                                                component="th"
-                                                scope="row"
-                                            >
-                                                <CheckboxElement
-                                                    name={`permissions.${perm.permission_id}`}
-                                                    control={control}
-                                                    value={perm.permission_id}
-                                                />
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
+                                                <TableCell
+                                                    component="th"
+                                                    scope="row"
+                                                >
+                                                    {perm.name}
+                                                </TableCell>
+                                                <TableCell
+                                                    component="th"
+                                                    scope="row"
+                                                    align="center"
+                                                >
+                                                    <CheckboxElement
+                                                        name={`permissions.${perm.id}`}
+                                                        control={control}
+                                                        value={perm.id}
+                                                        disabled={isRolePermission}
+                                                    />
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
                                 </TableBody>
                             </Table>
                         </TableContainer>

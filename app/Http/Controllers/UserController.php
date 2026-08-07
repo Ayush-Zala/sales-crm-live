@@ -209,7 +209,7 @@ class UserController extends Controller
 
     public function create()
     {
-        $roles = DB::table('roles')->select('id', 'name')->get();
+        $roles = \Spatie\Permission\Models\Role::with('permissions:id,name')->get(['id', 'name']);
 
         $groupPermissions = $this->getGroupPermissions();
 
