@@ -189,8 +189,8 @@ class DashboardController extends Controller
 
                 // get count of all online users from Cache
                 // $onlineUsers = Cache::get('online-users', []);
-                $onlineUsersCount = Cache::where('key', 'like', 'user-is-online-%')->count();
-                $onlineUsers = max(0, $onlineUsersCount - 1);
+                $onlineUsersCount = Cache::where('key', 'like', 'user-is-online-%')->where('expiration', '>=', time())->count();
+                $onlineUsers = $onlineUsersCount;
                 $totalUsers = User::where('is_active', 1)->count(); // Get the total number of active users
 
                 $totalassign = AssignCompanies::distinct('company_id')
@@ -319,16 +319,20 @@ class DashboardController extends Controller
                 }
 
                 // get count of all online users from Cache of all the users who have reporting authority id of this user
-                $onlineUsers = Cache::where(function ($query) use ($userdetail) {
+                $onlineUsers = Cache::where(function ($query) use ($userdetail, $id) {
                     $userIds = $userdetail->pluck('userid')->toArray();
+                    $userIds[] = $id; // Include the manager themselves
 
                     foreach ($userIds as $userId) {
                         $query->orWhere('key', 'like', "user-is-online-$userId");
                     }
-                })->count();
+                })->where('expiration', '>=', time())->count();
 
                 $totalUsers = User::where('is_active', 1)
-                    ->where('reporting_authority_id', $id)
+                    ->where(function($q) use ($id) {
+                        $q->where('reporting_authority_id', $id)
+                          ->orWhere('id', $id);
+                    })
                     ->count(); // Get the total number of active users
 
                 // totalassign where user_id is in the userdetail

@@ -93,4 +93,13 @@ class User extends Authenticatable
             'name' => 'No Reporting Authority'
         ]);
     }
+
+    /**
+     * Dummy method to prevent highideas/laravel-users-online package 
+     * from throwing an exception during logout.
+     */
+    public function pullCache()
+    {
+        // Do nothing, we handle cache natively now
+    }
 }

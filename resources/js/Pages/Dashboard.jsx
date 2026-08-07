@@ -23,7 +23,8 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { PieChart } from "@mui/x-charts/PieChart";
 import { includes } from "lodash";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { router } from "@inertiajs/react";
 import {
     AutocompleteElement,
     SelectElement,
@@ -56,8 +57,67 @@ export default function Dashboard({ auth, detail, reportData }) {
         includes(roles, "Business Development Manager");
 
     const isAdmin = includes(roles, "Admin");
-
     const isDEMOrDE = hasRole(auth, ["Data Entry Manager", "Data Entry"]);
+
+    const [liveEvents, setLiveEvents] = useState(detail.today_events || []);
+    const analyticsFilterRef = useRef('this_month'); // tracks current chart filter
+
+    // ── Echo subscription + 60-second polling ────────────────────────────────
+    useEffect(() => {
+        if (!window.Echo) {
+            console.error('[Reverb] window.Echo is not initialized!');
+            return;
+        }
+
+        // Admin OR Super Admin → global channel; managers → their own channel
+        const isSuperAdmin = includes(roles, "Super Admin");
+        const channelName = (isAdmin || isSuperAdmin)
+            ? 'dashboard.global'
+            : `dashboard.manager.${auth.user.id}`;
+
+        console.log('[Reverb] Subscribing to channel:', channelName);
+
+        const channel = window.Echo.private(channelName);
+
+        channel.subscribed(() => {
+            console.log('[Reverb] ✅ Successfully subscribed to:', channelName);
+        });
+
+        channel.error((err) => {
+            console.error('[Reverb] ❌ Channel auth error:', err);
+        });
+
+        // Real-time stats update (Sale / Assign / Unassign)
+        channel.listen('.DashboardStatsUpdated', (data) => {
+            console.log('[Reverb] DashboardStatsUpdated received:', data);
+            router.reload({ only: ['detail', 'reportData'], preserveScroll: true, preserveState: true });
+        });
+
+        // Real-time new calendar event
+        channel.listen('.NewCalendarEventCreated', (data) => {
+            console.log('[Reverb] NewCalendarEventCreated received:', data);
+            setLiveEvents(prev => [data.event, ...prev]);
+        });
+
+        // Real-time online users (Login / Logout)
+        channel.listen('.OnlineUsersUpdated', (data) => {
+            console.log('[Reverb] OnlineUsersUpdated received:', data);
+            router.reload({ only: ['detail'], preserveScroll: true, preserveState: true });
+        });
+
+        // 60-second polling for Online Users and overall stats (passive expiry)
+        const pollInterval = setInterval(() => {
+            router.reload({ only: ['detail'], preserveScroll: true, preserveState: true });
+        }, 60000);
+
+        return () => {
+            channel.stopListening('.DashboardStatsUpdated');
+            channel.stopListening('.NewCalendarEventCreated');
+            channel.stopListening('.OnlineUsersUpdated');
+            window.Echo.leave(channelName);
+            clearInterval(pollInterval);
+        };
+    }, [isAdmin, auth.user.id]);
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -77,10 +137,11 @@ export default function Dashboard({ auth, detail, reportData }) {
                                 />
                             ) : (
                                 <TotalSalesMade
-                                    count={detail.total_sales_made}
+                                    count={detail.total_sales_made ?? 0}
                                     trend={detail.trends?.sales}
                                     sparklineData={detail.kpiSparklineData?.map(d => d.sales)}
                                 />
+
                             )}
                         </Grid>
 
@@ -88,7 +149,7 @@ export default function Dashboard({ auth, detail, reportData }) {
                             <MetaDataCard
                                 format
                                 title="Total Assigned"
-                                count={detail.totalassigned || 0}
+                                count={detail.totalassigned ?? 0}
                                 trend={detail.trends?.assigned}
                                 trendLabel={detail.trends?.label}
                                 icon={<Users size={24} color="#1976d2" />}
@@ -111,7 +172,7 @@ export default function Dashboard({ auth, detail, reportData }) {
                                 <MetaDataCard
                                     format
                                     title="Unassigned"
-                                    count={detail.unassigned || 0}
+                                    count={detail.unassigned}
                                     trend={detail.trends?.unassigned}
                                     trendLabel={detail.trends?.label}
                                     icon={<UserX size={24} color="#f44336" />}
@@ -124,8 +185,8 @@ export default function Dashboard({ auth, detail, reportData }) {
                             <Grid item xs={12} md={6} lg={3}>
                                 <MetaDataCard
                                     title="Online Users / Total Active Users"
-                                    count={detail.online_users || 0}
-                                    extraCount={detail.total_users || 0}
+                                    count={detail.online_users}
+                                    extraCount={detail.total_users}
                                     icon={<Activity size={24} color="#4caf50" />}
                                     iconBg="#e8f5e9"
                                 />
@@ -181,7 +242,7 @@ export default function Dashboard({ auth, detail, reportData }) {
                             <EventTableComponent
                                 managerList={reportData.manager}
                                 usersList={detail.user_detail}
-                                events={detail.today_events}
+                                events={liveEvents}
                                 isAdminOrManager={isAdminOrManager}
                             />
                         </Grid>

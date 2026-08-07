@@ -27,6 +27,7 @@ use App\Models\CompanyBusiness;
 use App\Models\DispositionStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use App\Events\DashboardStatsUpdated;
 use App\Http\Resources\AccountResource;
 use App\Http\Resources\CompanyResource;
 
@@ -469,6 +470,15 @@ class AccountController extends Controller
 
             // increment the target_achieved column by 1 in the targets table where the user_id and time is equal to the current month
             Target::where('user_id', $userid)->where('time', $date)->increment('target_achieved', 1);
+
+            // Broadcast live stats update to dashboard
+            $currentUser      = Auth::user();
+            $managerId        = $currentUser->reporting_authority_id;
+            $saleStatusId     = DispositionStatus::where('name', 'Sale')->value('id');
+            $teamUserIds      = $managerId
+                ? User::where('reporting_authority_id', $managerId)->where('is_active', 1)->pluck('id')->toArray()
+                : [$userid];
+            broadcast(new DashboardStatsUpdated('sale', $managerId))->toOthers();
         }
 
         if ($request->dispositionType == 'Follow Up' || $request->dispositionType == 'Call Back' || $request->dispositionType == 'Interested') {
@@ -768,6 +778,12 @@ class AccountController extends Controller
         }
 
 
+        // Broadcast live stats update to dashboard
+        $managerId     = Auth::user()->id; // assigner is the manager
+        $saleStatusId  = DispositionStatus::where('name', 'Sale')->value('id');
+        $teamUserIds   = User::where('reporting_authority_id', $managerId)->where('is_active', 1)->pluck('id')->toArray();
+        broadcast(new DashboardStatsUpdated('assign', $managerId))->toOthers();
+
         return response()->json(['message' => 'Company assigned Successfully'], 201);
     }
 
@@ -808,6 +824,13 @@ class AccountController extends Controller
             ]);
 
         }
+
+        // Broadcast live stats update to dashboard
+        $managerId     = Auth::user()->id;
+        $saleStatusId  = DispositionStatus::where('name', 'Sale')->value('id');
+        $teamUserIds   = User::where('reporting_authority_id', $managerId)->where('is_active', 1)->pluck('id')->toArray();
+        broadcast(new DashboardStatsUpdated('unassign', $managerId))->toOthers();
+
         return response()->json(['message' => 'Company unassigned successfully'], 201);
 
     }

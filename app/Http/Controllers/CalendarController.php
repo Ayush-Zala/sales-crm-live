@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\NewCalendarEventCreated;
 use App\Models\ActivityLog;
 use App\Models\Calendar;
 use App\Models\Company;
@@ -104,6 +105,25 @@ class CalendarController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // Broadcast new event to dashboard (for live Events table update)
+            $creator   = Auth::user();
+            $managerId = $creator->reporting_authority_id ?? $creator->id;
+            $company   = $request->company_id ? Company::select('id', 'name')->find($request->company_id) : null;
+            broadcast(new NewCalendarEventCreated($managerId, [
+                'id'           => $ins->id,
+                'title'        => $ins->title,
+                'start_date'   => $ins->start_date,
+                'end_date'     => $ins->end_date,
+                'description'  => $ins->description,
+                'timezone'     => $ins->timezone,
+                'all_day'      => $ins->all_day,
+                'repeat_rule'  => $ins->repeat_rule,
+                'company_id'   => $ins->company_id,
+                'company_name' => $company?->name,
+                'user_name'    => $creator->name,
+                'userid'       => $creator->id,
+            ]))->toOthers();
 
             return response(["status" => 1, 'data' => $ins, 'message' => 'Event created successfully']);
         } else {
