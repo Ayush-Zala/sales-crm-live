@@ -14,36 +14,35 @@ class DashboardStatsUpdated implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public string $type;
-    public ?int $managerId;
+    public int $managerId;
+    public int $count;
 
     /**
-     * @param string   $type       'sale' | 'assign' | 'unassign'
-     * @param int|null $managerId  The manager whose team triggered this. Null = global.
+     * Create a new event instance.
+     *
+     * @param string $type The event type: 'sale', 'assign', 'unassign'
+     * @param int $managerId The ID of the manager responsible (for localized updates)
+     * @param int $count The number of items affected
      */
-    public function __construct(
-        string $type,
-        ?int $managerId
-    ) {
-        $this->type          = $type;
-        $this->managerId     = $managerId;
+    public function __construct(string $type, int $managerId, int $count = 1)
+    {
+        $this->type = $type;
+        $this->managerId = $managerId;
+        $this->count = $count;
     }
 
     /**
-     * Broadcast on the appropriate private channels:
-     *  - Always on the global admin channel
-     *  - And on the manager's personal channel (if managerId is set)
+     * Get the channels the event should broadcast on.
+     *
+     * @return array<int, \Illuminate\Broadcasting\Channel>
      */
     public function broadcastOn(): array
     {
-        $channels = [
+        // Broadcast to a global channel for admins, and a manager-specific channel
+        return [
             new PrivateChannel('dashboard.global'),
+            new PrivateChannel('dashboard.manager.' . $this->managerId),
         ];
-
-        if ($this->managerId) {
-            $channels[] = new PrivateChannel("dashboard.manager.{$this->managerId}");
-        }
-
-        return $channels;
     }
 
     public function broadcastAs(): string
@@ -54,8 +53,9 @@ class DashboardStatsUpdated implements ShouldBroadcast
     public function broadcastWith(): array
     {
         return [
-            'type'           => $this->type,
-            'manager_id'     => $this->managerId,
+            'type'       => $this->type,
+            'manager_id' => $this->managerId,
+            'count'      => $this->count,
         ];
     }
 }

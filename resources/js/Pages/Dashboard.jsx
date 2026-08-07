@@ -22,7 +22,7 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { PieChart } from "@mui/x-charts/PieChart";
-import { includes } from "lodash";
+import { includes, debounce } from "lodash";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router } from "@inertiajs/react";
 import {
@@ -60,9 +60,24 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
     const isDEMOrDE = hasRole(auth, ["Data Entry Manager", "Data Entry"]);
 
     const [liveEvents, setLiveEvents] = useState(detail.today_events || []);
+    
+    // ── Local State for Dynamic KPI Updates ────────────────────────────────
+    const [totalSales, setTotalSales] = useState(detail.total_sales_made ?? 0);
+    const [totalAssigned, setTotalAssigned] = useState(detail.totalassigned ?? 0);
+    const [totalUnassigned, setTotalUnassigned] = useState(detail.unassigned ?? 0);
+    const [onlineUsersCount, setOnlineUsersCount] = useState(detail.online_users ?? 0);
+
+    // Sync state if dashboard does a full reload manually
+    useEffect(() => {
+        setTotalSales(detail.total_sales_made ?? 0);
+        setTotalAssigned(detail.totalassigned ?? 0);
+        setTotalUnassigned(detail.unassigned ?? 0);
+        setOnlineUsersCount(detail.online_users ?? 0);
+    }, [detail]);
+
     const analyticsFilterRef = useRef('this_month'); // tracks current chart filter
 
-    // ── Echo subscription + 60-second polling ────────────────────────────────
+    // ── Echo subscription ──────────────────────────────────────────────────
     useEffect(() => {
         if (!window.Echo) {
             console.error('[Reverb] window.Echo is not initialized!');
@@ -90,7 +105,16 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
         // Real-time stats update (Sale / Assign / Unassign)
         channel.listen('.DashboardStatsUpdated', (data) => {
             console.log('[Reverb] DashboardStatsUpdated received:', data);
-            router.reload({ only: ['detail', 'reportData'], preserveScroll: true, preserveState: true });
+            const count = data.count || 1;
+            if (data.type === 'sale') {
+                setTotalSales(prev => prev + count);
+            } else if (data.type === 'assign') {
+                setTotalAssigned(prev => prev + count);
+                setTotalUnassigned(prev => Math.max(0, prev - count));
+            } else if (data.type === 'unassign') {
+                setTotalAssigned(prev => Math.max(0, prev - count));
+                setTotalUnassigned(prev => prev + count);
+            }
         });
 
         // Real-time new calendar event
@@ -102,20 +126,16 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
         // Real-time online users (Login / Logout)
         channel.listen('.OnlineUsersUpdated', (data) => {
             console.log('[Reverb] OnlineUsersUpdated received:', data);
-            router.reload({ only: ['detail'], preserveScroll: true, preserveState: true });
+            if (data.online_count !== undefined) {
+                setOnlineUsersCount(data.online_count);
+            }
         });
-
-        // 60-second polling for Online Users and overall stats (passive expiry)
-        const pollInterval = setInterval(() => {
-            router.reload({ only: ['detail'], preserveScroll: true, preserveState: true });
-        }, 60000);
 
         return () => {
             channel.stopListening('.DashboardStatsUpdated');
             channel.stopListening('.NewCalendarEventCreated');
             channel.stopListening('.OnlineUsersUpdated');
             window.Echo.leave(channelName);
-            clearInterval(pollInterval);
         };
     }, [isAdmin, auth.user.id]);
 
@@ -137,7 +157,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
                                 />
                             ) : (
                                 <TotalSalesMade
-                                    count={detail.total_sales_made ?? 0}
+                                    count={totalSales}
                                     trend={detail.trends?.sales}
                                     sparklineData={detail.kpiSparklineData?.map(d => d.sales)}
                                 />
@@ -149,7 +169,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
                             <MetaDataCard
                                 format
                                 title="Total Assigned"
-                                count={detail.totalassigned ?? 0}
+                                count={totalAssigned}
                                 trend={detail.trends?.assigned}
                                 trendLabel={detail.trends?.label}
                                 icon={<Users size={24} color="#1976d2" />}
@@ -172,7 +192,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
                                 <MetaDataCard
                                     format
                                     title="Unassigned"
-                                    count={detail.unassigned}
+                                    count={totalUnassigned}
                                     trend={detail.trends?.unassigned}
                                     trendLabel={detail.trends?.label}
                                     icon={<UserX size={24} color="#f44336" />}
@@ -185,7 +205,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
                             <Grid item xs={12} md={6} lg={3}>
                                 <MetaDataCard
                                     title="Online Users / Total Active Users"
-                                    count={detail.online_users}
+                                    count={onlineUsersCount}
                                     extraCount={detail.total_users}
                                     icon={<Activity size={24} color="#4caf50" />}
                                     iconBg="#e8f5e9"

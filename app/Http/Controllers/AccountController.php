@@ -782,7 +782,12 @@ class AccountController extends Controller
         $managerId     = Auth::user()->id; // assigner is the manager
         $saleStatusId  = DispositionStatus::where('name', 'Sale')->value('id');
         $teamUserIds   = User::where('reporting_authority_id', $managerId)->where('is_active', 1)->pluck('id')->toArray();
-        broadcast(new DashboardStatsUpdated('assign', $managerId))->toOthers();
+        broadcast(new DashboardStatsUpdated('assign', $managerId, count($request->companyIds)))->toOthers();
+
+        // Clear dashboard caches
+        \Illuminate\Support\Facades\Cache::forget('total_active_assign_companies');
+        \Illuminate\Support\Facades\Cache::forget('total_assign_manager_' . $managerId);
+        \Illuminate\Support\Facades\Cache::forget('total_clients_count');
 
         return response()->json(['message' => 'Company assigned Successfully'], 201);
     }
@@ -829,7 +834,12 @@ class AccountController extends Controller
         $managerId     = Auth::user()->id;
         $saleStatusId  = DispositionStatus::where('name', 'Sale')->value('id');
         $teamUserIds   = User::where('reporting_authority_id', $managerId)->where('is_active', 1)->pluck('id')->toArray();
-        broadcast(new DashboardStatsUpdated('unassign', $managerId))->toOthers();
+        broadcast(new DashboardStatsUpdated('unassign', $managerId, count($request->companyIds)))->toOthers();
+
+        // Clear dashboard caches
+        \Illuminate\Support\Facades\Cache::forget('total_active_assign_companies');
+        \Illuminate\Support\Facades\Cache::forget('total_assign_manager_' . $managerId);
+        \Illuminate\Support\Facades\Cache::forget('total_clients_count');
 
         return response()->json(['message' => 'Company unassigned successfully'], 201);
 
