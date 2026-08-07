@@ -4,16 +4,10 @@ import { Head } from "@inertiajs/react";
 import { Grid } from "@mui/material";
 import { useState } from "react";
 import RolesTableCellComponent from "./RolesTableCellComponent";
-import CreateRole from "./dialogs/CreateRole";
 import { Fragment } from "react";
 import PaginatedTable from "@/Components/SimplePaginatedTable";
 
 const Index = ({ auth, roles }) => {
-    const [open, setOpen] = useState(false);
-
-    const handleOpen = () => setOpen(true);
-    const handleClose = () => setOpen(false);
-
     const columns = [
         { id: "id", label: "ID", align: "left" },
         { id: "name", label: "Name", textAlign: "left" },
@@ -31,7 +25,7 @@ const Index = ({ auth, roles }) => {
                     title="Roles"
                     subtitle="View roles here"
                     button="Create new role"
-                    onClick={handleOpen}
+                    href={route("role.createView")}
                 >
                     <Grid item xs={12}>
                         <PaginatedTable
@@ -46,7 +40,6 @@ const Index = ({ auth, roles }) => {
                     </Grid>
                 </MainContentTemplate>
             </AuthenticatedLayout>
-            <CreateRole open={open} handleClose={handleClose} />
         </Fragment>
     );
 };

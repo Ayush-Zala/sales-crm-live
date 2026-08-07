@@ -38,11 +38,11 @@ class RoleController extends Controller
         ]);
     }
 
-    public function create(Request $request)
+    public function store(Request $request)
     {
         // validations
         $request->validate([
-            'role_name' => 'required|string',
+            'role_name' => 'required|string|unique:roles,name',
         ]);
 
         $role = DB::table('roles')->insert([
@@ -56,6 +56,15 @@ class RoleController extends Controller
             ->select('id', 'name')
             ->where('name', $request->role_name)
             ->first();
+
+        if (isset($request->currentPermissions) && count($request->currentPermissions) > 0) {
+            foreach ($request->currentPermissions as $key => $val) {
+                RoleHasPermission::create([
+                    'permission_id' => $val,
+                    'role_id' => $roleDetails->id
+                ]);
+            }
+        }
 
         $properties = [
             'attributes' => [
@@ -89,6 +98,24 @@ class RoleController extends Controller
             ->get();
 
         return $groupPermissions;
+    }
+
+    public function createView()
+    {
+        $permissions = Group::with('permissions:id,name')->get(['id', 'name'])->map(function ($group) {
+            return [
+                'group_id' => $group->id,
+                'group_name' => $group->name,
+                'permissions' => $group->permissions->map(function ($permission) {
+                    return [
+                        'id' => $permission->id,
+                        'name' => $permission->name,
+                    ];
+                }),
+            ];
+        });
+
+        return Inertia::render('Role/CreateRole', ['permissions' => $permissions]);
     }
 
     public function edit(Request $request)

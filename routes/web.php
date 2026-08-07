@@ -227,7 +227,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/role/edit', [RoleController::class, 'edit'])->name('role.edit');
     Route::get('/role/getRoleDetails/{id}', [RoleController::class, 'getRoleDetails'])->name('role.getRoleDetails');
 
-    Route::post('/role/create', [RoleController::class, 'create'])->name('role.create');
+    Route::get('/role/create', [RoleController::class, 'createView'])->name('role.createView');
+    Route::post('/role/store', [RoleController::class, 'store'])->name('role.store');
     Route::post('/role/addPermissionsToRole', [RoleController::class, 'addPermissionsToRole'])->name('role.addPermissionsToRole');
     Route::post('/role/update', [RoleController::class, 'update'])->name('role.update');
 
