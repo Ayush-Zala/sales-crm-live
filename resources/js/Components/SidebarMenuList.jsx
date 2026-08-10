@@ -43,7 +43,7 @@ const SidebarMenuList = () => {
 
     const currentRoute = route().current();
     const hasViewLeadsPermission = auth.permissions.includes("Can View Lead");
-  
+    const hasViewRetentionPermission = auth.permissions.includes("Can View Retention");
 
     const sideBar = isAdmin
         ? [
@@ -62,11 +62,13 @@ const SidebarMenuList = () => {
                   icon: (props) => <StoreRounded {...props} />,
                   link: "lead.index",
               },
-              {
-                  name: "Retention",
-                  icon: (props) => <BusinessRounded {...props} />,
-                  link: "retention.index",
-              },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
               {
                   name: "Event Managment",
                   icon: (props) => <EventNoteRounded {...props} />,
@@ -140,6 +142,13 @@ const SidebarMenuList = () => {
                   icon: (props) => <StoreRounded {...props} />,
                   link: "lead.index",
               },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
               {
                   name: "Event Managment",
                   icon: (props) => <EventNoteRounded {...props} />,
@@ -188,6 +197,13 @@ const SidebarMenuList = () => {
                   icon: (props) => <StoreRounded {...props} />,
                   link: "lead.index",
               },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
               {
                   name: "Event Managment",
                   icon: (props) => <EventNoteRounded {...props} />,
@@ -226,6 +242,13 @@ const SidebarMenuList = () => {
                   icon: (props) => <StoreRounded {...props} />,
                   link: "lead.index",
               },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
               {
                   name: "Reports",
                   icon: (props) => <SummarizeRounded {...props} />,
@@ -244,6 +267,13 @@ const SidebarMenuList = () => {
                   icon: (props) => <BusinessRounded {...props} />,
                   link: "account.index",
               },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
           ]
         : isCSRRole
         ? [
@@ -259,11 +289,13 @@ const SidebarMenuList = () => {
                                         link: "lead.index",
                                     }]
                                     : []),
-              {
-                  name: "Retention",
-                  icon: (props) => <BusinessRounded {...props} />,
-                  link: "retention.index",
-              },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
               {
                   name: "Countries",
                   icon: (props) => <PublicRounded {...props} />,
@@ -286,6 +318,20 @@ const SidebarMenuList = () => {
                   icon: (props) => <StoreRounded {...props} />,
                   link: "lead.index",
               },
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
+              ...(hasViewRetentionPermission
+                                    ? [{
+                                        name: "Retention",
+                                        icon: (props) => <BusinessRounded {...props} />,
+                                        link: "retention.index",
+                                    }]
+                                    : []),
               {
                   name: "Event Managment",
                   icon: (props) => <EventNoteRounded {...props} />,

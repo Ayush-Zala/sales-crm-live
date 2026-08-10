@@ -145,19 +145,9 @@ class RetentionController extends Controller
             $query->where('name', 'like', '%' . $request->search . '%');
         });
 
-        if ($roles->contains('Customer Service Representative Manager')) {
-            // get all the users whoose role is Customer Service Representative
-            $roleId = Role::where('name', 'Customer Service Representative')->first()->id;
-            $usersL = ModelHasRole::where('role_id', $roleId)->pluck('model_id')->toArray();
-
-            $retentions = $retentions->whereHas('assignBy', function ($query) use ($user, $usersL) {
-                $query->whereIn('assign_by', array_merge([$user->id], $usersL));
-            })->orWhereDoesntHave('assignBy');
-
-        } else if ($roles->contains('Customer Service Representative')) {
-            $retentions = $retentions->whereHas('assignTo', function ($query) use ($user) {
-                $query->where('assign_to', $user->id);
-            });
+        $isAdminOrCSRM = $roles->contains('Admin') || $roles->contains('Customer Service Representative Manager');
+        if (!$isAdminOrCSRM) {
+            $retentions = $retentions->where('assign_to', $user->id);
         }
 
         $retentions = $retentions->paginate($request->per_page ?? 50);
@@ -438,6 +428,7 @@ class RetentionController extends Controller
 
     public function create()
     {
+        abort(403, 'Retentions can only be added manually.');
         $countries = DB::table('countries')->select('id', 'name', 'iso2', 'phonecode')->get();
 
         // get all the industries from the comapnies table withput null values
@@ -448,6 +439,7 @@ class RetentionController extends Controller
 
     public function store(Request $request)
     {
+        abort(403, 'Retentions can only be added manually.');
         $lead = Retention::create([
             'name' => $request->leadName,
             'website' => $request->website,
@@ -665,6 +657,7 @@ class RetentionController extends Controller
 
     public function edit($id)
     {
+        abort(403, 'Retentions can only be edited manually.');
         $leadInfo = Retention::select(
             'retentions.id',
             'retentions.name as company_name',
@@ -785,6 +778,7 @@ class RetentionController extends Controller
 
     public function update(Request $request)
     {
+        abort(403, 'Retentions can only be edited manually.');
 
         $lead = Retention::where('id', $request->leadId)->first()->update([
             'name' => $request->leadName,
@@ -1055,6 +1049,7 @@ class RetentionController extends Controller
 
     public function import(Request $request)
     {
+        abort(403, 'Retentions can only be added manually.');
         $filePath = public_path('uploads/retention.xlsx');
 
         $spreadsheet = IOFactory::load($filePath);

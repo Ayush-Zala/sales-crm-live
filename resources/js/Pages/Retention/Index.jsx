@@ -34,13 +34,6 @@ const index = ({ auth, leadsData, users, dispositions }) => {
         "Can Edit Retention Assign User"
     );
 
-    const createLeadButton =
-        role || isAdminOrCSRM
-            ? {
-                  name: "Create a new Retention",
-                  href: route("retention.create"),
-              }
-            : { name: "", href: "" };
 
     const allColumns = [
         { id: "name", label: "Name", align: "left", disableSearch: false },
@@ -99,8 +92,8 @@ const index = ({ auth, leadsData, users, dispositions }) => {
             <MainContentTemplate
                 title="Retention"
                 subtitle="View Retention list here"
-                button={createLeadButton.name}
-                href={createLeadButton.href}
+                button=""
+                href=""
             >
                 <Grid
                     container

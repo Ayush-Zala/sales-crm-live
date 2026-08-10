@@ -364,7 +364,7 @@ class UserController extends Controller
             $user->save();
 
             $user->assignRole($request->roleName);
-            $user->givePermissionTo($request->permissions);
+            $user->syncPermissions($request->permissions ?? []);
 
             $properties = [
                 'attributes' => [

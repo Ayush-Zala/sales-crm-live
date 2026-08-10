@@ -35,58 +35,19 @@ const EditUser = ({
         name: user.name,
         email: user.email,
         roleName: user.role,
-        permissions: [],
+        permissions: userPermissions,
         reportingAuthority: user.reporting_authority_id || null,
     });
 
-    const currentPermissions = [
-        ...new Set([...userPermissions, ...data.permissions]),
-    ];
-
     const handleSwitchChange = (id) => {
-        const contains = currentPermissions.includes(id);
-
-        if (contains) {
-            if (currentPermissions.includes(id)) {
-                // User already toggled it, so just remove it
-                setData(
-                    "permissions",
-                    currentPermissions.filter((p) => p !== id)
-                );
-            } else {
-                // Add to permissions removal list (you might want a `removedPermissions` array)
-                setData("permissions", [...data.permissions, id]);
-            }
+        if (data.permissions.includes(id)) {
+            setData(
+                "permissions",
+                data.permissions.filter((p) => p !== id)
+            );
         } else {
-            if (currentPermissions.includes(id)) {
-                // User already toggled it, so just remove it
-                setData(
-                    "permissions",
-                    currentPermissions.filter((p) => p !== id)
-                );
-            } else {
-                // Add to permissions removal list (you might want a `removedPermissions` array)
-                setData("permissions", [...data.permissions, id]);
-            }
+            setData("permissions", [...data.permissions, id]);
         }
-
-        // if (userPermissions.includes(id)) {
-        //     // Permission was already there — user wants to remove it
-        //     if (data.permissions.includes(id)) {
-        //         // User already toggled it, so just remove it
-        //         setData("permissions", data.permissions.filter(p => p !== id));
-        //     } else {
-        //         // Add to permissions removal list (you might want a `removedPermissions` array)
-        //         setData("permissions", [...data.permissions, id]);
-        //     }
-        // } else {
-        //     // Permission wasn't there — user wants to add it
-        //     if (data.permissions.includes(id)) {
-        //         setData("permissions", data.permissions.filter(p => p !== id));
-        //     } else {
-        //         setData("permissions", [...data.permissions, id]);
-        //     }
-        // }
     };
 
     const handleSubmit = (e) => {
@@ -258,9 +219,6 @@ const EditUser = ({
                                                                             <Switch
                                                                                 size="small"
                                                                                 color={
-                                                                                    userPermissions.includes(
-                                                                                        p.id
-                                                                                    ) ||
                                                                                     data.permissions.includes(
                                                                                         p.id
                                                                                     )
@@ -268,7 +226,7 @@ const EditUser = ({
                                                                                         : "success"
                                                                                 }
                                                                                 checked={
-                                                                                    currentPermissions.includes(
+                                                                                    data.permissions.includes(
                                                                                         p.id
                                                                                     ) ||
                                                                                     rolePermissions.includes(

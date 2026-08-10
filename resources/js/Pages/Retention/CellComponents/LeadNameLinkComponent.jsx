@@ -9,9 +9,7 @@ const LeadsNameLinkComponent = ({ lead }) => {
         "Business Development Manager",
     ]);
 
-    const href = isAdminOrBDM
-        ? route("retention.edit", lead.id)
-        : route("retention.view", lead.id);
+    const href = route("retention.view", lead.id);
 
     return (
         <MuiLink underline="none" href={href} target="_blank">
