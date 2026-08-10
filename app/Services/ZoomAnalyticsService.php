@@ -17,9 +17,10 @@ class ZoomAnalyticsService
      * @param string|null $search
      * @param string|null $directionFilter 'inbound' or 'outbound'
      * @param int|null $userFilter
+     * @param array|null $allowedUserIds
      * @return array
      */
-    public static function getAnalytics(Carbon $startDate, Carbon $endDate, $search = null, $directionFilter = null, $userFilter = null)
+    public static function getAnalytics(Carbon $startDate, Carbon $endDate, $search = null, $directionFilter = null, $userFilter = null, $allowedUserIds = null)
     {
         $zoomCallLogs = CallLog::join('users', 'call_logs.user_id', '=', 'users.id')
             ->select('call_logs.*', 'users.name as user_name');
@@ -43,6 +44,9 @@ class ZoomAnalyticsService
         }
         if ($userFilter) {
             $zoomCallLogs->where('call_logs.user_id', $userFilter);
+        }
+        if ($allowedUserIds !== null) {
+            $zoomCallLogs->whereIn('call_logs.user_id', $allowedUserIds);
         }
 
         $analyticsQuery = clone $zoomCallLogs;
@@ -82,6 +86,9 @@ class ZoomAnalyticsService
         }
         if ($userFilter) {
             $prevQuery->where('call_logs.user_id', $userFilter);
+        }
+        if ($allowedUserIds !== null) {
+            $prevQuery->whereIn('call_logs.user_id', $allowedUserIds);
         }
 
         $prevTotalCalls = (clone $prevQuery)->count();
@@ -213,9 +220,10 @@ class ZoomAnalyticsService
      * @param Carbon $endDate
      * @param string|null $search
      * @param int|null $userFilter
+     * @param array|null $allowedUserIds
      * @return array
      */
-    public static function getMeetingAnalytics(Carbon $startDate, Carbon $endDate, $search = null, $userFilter = null)
+    public static function getMeetingAnalytics(Carbon $startDate, Carbon $endDate, $search = null, $userFilter = null, $allowedUserIds = null)
     {
         $zoomMeetings = MeetingLog::join('users', 'meeting_logs.user_id', '=', 'users.id')
             ->select('meeting_logs.*', 'users.name as user_name');
@@ -226,6 +234,9 @@ class ZoomAnalyticsService
         }
         if ($userFilter) {
             $zoomMeetings->where('meeting_logs.user_id', $userFilter);
+        }
+        if ($allowedUserIds !== null) {
+            $zoomMeetings->whereIn('meeting_logs.user_id', $allowedUserIds);
         }
 
         $analyticsQuery = clone $zoomMeetings;
@@ -251,6 +262,9 @@ class ZoomAnalyticsService
         }
         if ($userFilter) {
             $prevQuery->where('meeting_logs.user_id', $userFilter);
+        }
+        if ($allowedUserIds !== null) {
+            $prevQuery->whereIn('meeting_logs.user_id', $allowedUserIds);
         }
 
         $prevTotalMeetings = (clone $prevQuery)->count();

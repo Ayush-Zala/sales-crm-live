@@ -776,16 +776,38 @@ class DashboardController extends Controller
             ];
         };
 
-        $zoomAnalyticsClosure = function () use ($request) {
+        $zoomAnalyticsClosure = function () use ($request, $rolesarr) {
             $analyticsFilter = $request->analytics_filter ?? 'this_month';
             list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
-            return \App\Services\ZoomAnalyticsService::getAnalytics($analyticsStart, $analyticsEnd);
+            
+            $allowedUserIds = null;
+            if (!$rolesarr->contains('Admin')) {
+                if ($rolesarr->contains('Business Development Manager') || $rolesarr->contains('Business Development Team Lead')) {
+                    $allowedUserIds = User::where('reporting_authority_id', Auth::id())->pluck('id')->toArray();
+                    $allowedUserIds[] = Auth::id();
+                } else {
+                    $allowedUserIds = [Auth::id()];
+                }
+            }
+
+            return \App\Services\ZoomAnalyticsService::getAnalytics($analyticsStart, $analyticsEnd, null, null, null, $allowedUserIds);
         };
 
-        $zoomMeetingAnalyticsClosure = function () use ($request) {
+        $zoomMeetingAnalyticsClosure = function () use ($request, $rolesarr) {
             $analyticsFilter = $request->analytics_filter ?? 'this_month';
             list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
-            return \App\Services\ZoomAnalyticsService::getMeetingAnalytics($analyticsStart, $analyticsEnd);
+            
+            $allowedUserIds = null;
+            if (!$rolesarr->contains('Admin')) {
+                if ($rolesarr->contains('Business Development Manager') || $rolesarr->contains('Business Development Team Lead')) {
+                    $allowedUserIds = User::where('reporting_authority_id', Auth::id())->pluck('id')->toArray();
+                    $allowedUserIds[] = Auth::id();
+                } else {
+                    $allowedUserIds = [Auth::id()];
+                }
+            }
+
+            return \App\Services\ZoomAnalyticsService::getMeetingAnalytics($analyticsStart, $analyticsEnd, null, null, $allowedUserIds);
         };
 
         return Inertia::render('Dashboard', [

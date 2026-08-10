@@ -16,9 +16,24 @@ class ZoomMeetingsController extends Controller
         $userFilter = $request->user;
         $search = $request->search;
 
+        $rolesarr = \Illuminate\Support\Facades\Auth::user()->getRoleNames();
+        $allowedUserIds = null;
+        if (!$rolesarr->contains('Admin')) {
+            if ($rolesarr->contains('Business Development Manager') || $rolesarr->contains('Business Development Team Lead')) {
+                $allowedUserIds = User::where('reporting_authority_id', \Illuminate\Support\Facades\Auth::id())->pluck('id')->toArray();
+                $allowedUserIds[] = \Illuminate\Support\Facades\Auth::id();
+            } else {
+                $allowedUserIds = [\Illuminate\Support\Facades\Auth::id()];
+            }
+        }
+
         $zoomMeetings = MeetingLog::join('users', 'meeting_logs.user_id', '=', 'users.id')
             ->select('meeting_logs.*', 'users.name as user_name')
             ->orderBy('meeting_logs.id', 'desc');
+
+        if ($allowedUserIds !== null) {
+            $zoomMeetings = $zoomMeetings->whereIn('meeting_logs.user_id', $allowedUserIds);
+        }
 
         if ($userFilter) {
             $zoomMeetings = $zoomMeetings->where('meeting_logs.user_id', $userFilter);
@@ -33,7 +48,7 @@ class ZoomMeetingsController extends Controller
 
         $zoomMeetings = $zoomMeetings->whereBetween('meeting_logs.start_time', [$startDate, $endDate]);
 
-        $analytics = \App\Services\ZoomAnalyticsService::getMeetingAnalytics($startDate, $endDate, $search, $userFilter);
+        $analytics = \App\Services\ZoomAnalyticsService::getMeetingAnalytics($startDate, $endDate, $search, $userFilter, $allowedUserIds);
 
         if ($request->per_page) {
             $zoomMeetings = $zoomMeetings->paginate($request->per_page)->withQueryString();
@@ -55,12 +70,17 @@ class ZoomMeetingsController extends Controller
             ->where('name', 'Business Development Manager')
             ->value('id');
 
-        $users = User::join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
+        $usersQuery = User::join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
             ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
             ->select('users.id', 'users.name')
             ->whereIn('roles.id', [$sales_Exec_role_id, $bd_team_lead_role_id, $bd_manager_role_id])
-            ->where('users.is_active', 1)
-            ->get();
+            ->where('users.is_active', 1);
+
+        if ($allowedUserIds !== null) {
+            $usersQuery = $usersQuery->whereIn('users.id', $allowedUserIds);
+        }
+
+        $users = $usersQuery->get();
 
 
         return Inertia::render('ZoomMeetings/Index', [
