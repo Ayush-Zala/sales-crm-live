@@ -28,6 +28,12 @@ class ZoomMeetingsController extends Controller
             $zoomMeetings = $zoomMeetings->where('meeting_logs.topic', 'like', '%' . $search . '%');
         }
 
+        $startDate = $request->start_date ? \Carbon\Carbon::parse($request->start_date)->startOfDay() : \Carbon\Carbon::now()->subDays(6)->startOfDay();
+        $endDate = $request->end_date ? \Carbon\Carbon::parse($request->end_date)->endOfDay() : \Carbon\Carbon::now()->endOfDay();
+
+        $zoomMeetings = $zoomMeetings->whereBetween('meeting_logs.start_time', [$startDate, $endDate]);
+
+        $analytics = \App\Services\ZoomAnalyticsService::getMeetingAnalytics($startDate, $endDate, $search, $userFilter);
 
         if ($request->per_page) {
             $zoomMeetings = $zoomMeetings->paginate($request->per_page)->withQueryString();
@@ -60,6 +66,7 @@ class ZoomMeetingsController extends Controller
         return Inertia::render('ZoomMeetings/Index', [
             'zoomMeetings' => $zoomMeetings,
             'users' => $users,
+            'analytics' => $analytics,
         ]);
     }
 }

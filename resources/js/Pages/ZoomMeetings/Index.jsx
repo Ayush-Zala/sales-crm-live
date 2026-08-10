@@ -7,8 +7,11 @@ import { Grid } from "@mui/material";
 import ZoomMeetingLogsCellComponent from "./ZoomMeetingLogsCellComponent";
 import ZoomMeetingUserSearchFilter from "./ZoomMeetingUserSearchFilter";
 import ZoomMeetingLogDataSearch from "./ZoomMeetingLogDataSearch";
+import ZoomMeetingAnalytics from "./ZoomMeetingAnalytics";
+import ZoomMeetingThirdSection from "./ZoomMeetingThirdSection";
+import ZoomCallDateFilter from "../ZoomCallLogs/ZoomCallDateFilter";
 
-const Index = ({ auth, zoomMeetings, users }) => {
+const Index = ({ auth, zoomMeetings, users, analytics }) => {
     const page = usePage();
     const params = extractUrlParams(page.url);
 
@@ -69,8 +72,12 @@ const Index = ({ auth, zoomMeetings, users }) => {
                         justifyContent: "flex-end",
                         alignItems: "center",
                         gap: 2,
+                        mb: 3,
                     }}
                 >
+                    <Grid item>
+                        <ZoomCallDateFilter startDateParam={params.start_date} endDateParam={params.end_date} />
+                    </Grid>
                     <Grid item xs={2}>
                         <ZoomMeetingUserSearchFilter
                             users={users}
@@ -80,6 +87,12 @@ const Index = ({ auth, zoomMeetings, users }) => {
                     <Grid item xs={3}>
                         <ZoomMeetingLogDataSearch search={params.search} />
                     </Grid>
+                </Grid>
+                <Grid item xs={12} mt={3}>
+                    <ZoomMeetingAnalytics analytics={analytics} />
+                </Grid>
+                <Grid item xs={12}>
+                    <ZoomMeetingThirdSection analytics={analytics} />
                 </Grid>
                 <Grid item xs={12}>
                     <PaginatedTable

@@ -7,11 +7,12 @@ import { DateCalendar } from "@mui/x-date-pickers";
 import { formatDate } from "@/utils/date-time-formatters";
 import ZoomCallAnalytics from "../ZoomCallLogs/ZoomCallAnalytics";
 import ZoomCallCharts from "../ZoomCallLogs/ZoomCallCharts";
+import ZoomMeetingAnalytics from "../ZoomMeetings/ZoomMeetingAnalytics";
 
-export default function AnalyticsOverview({ data = null, zoomAnalytics = null }) {
+export default function AnalyticsOverview({ data = null, zoomAnalytics = null, zoomMeetingAnalytics = null }) {
     const [openDialog, setOpenDialog] = useState(false);
     const [dateRange, setDateRange] = useState([null, null]);
-    
+
     // Parse the current filter from the URL so the select box stays in sync
     const queryParams = new URLSearchParams(window.location.search);
     const currentFilter = queryParams.get('analytics_filter') || 'this_month';
@@ -21,7 +22,7 @@ export default function AnalyticsOverview({ data = null, zoomAnalytics = null })
         if (val === 'custom') {
             setOpenDialog(true);
         } else {
-            useUpdateSearchParam({ analytics_filter: val }, "/dashboard", { only: ['analyticsOverview', 'zoomAnalytics'] });
+            useUpdateSearchParam({ analytics_filter: val }, "/dashboard", { only: ['analyticsOverview', 'zoomAnalytics', 'zoomMeetingAnalytics'] });
         }
     };
     if (!data || !data.dailyData || data.dailyData.length === 0) return null;
@@ -97,41 +98,41 @@ export default function AnalyticsOverview({ data = null, zoomAnalytics = null })
                 {/* Stats Sidebar */}
                 <Grid item xs={12} md={3}>
                     <Stack spacing={2}>
-                        <StatBox 
-                            icon={<TrendingUp size={20} color="#2196f3" />}
-                            title="Total Calls" 
+                        <StatBox
+                            icon={<Activity size={20} />}
+                            title="Total Logged Calls"
                             value={totalAll.toLocaleString()}
                             trend={formatTrend(trends.total)}
-                            color="#e3f2fd"
                             trendColor={getTrendColor(trends.total)}
                             trendLabel={getTrendLabel()}
+                            color="#e3f2fd"
                         />
-                        <StatBox 
-                            icon={<Video size={20} color="#4caf50" />}
-                            title="Zoom Calls" 
+                        <StatBox
+                            icon={<Video size={20} />}
+                            title="Zoom Calls"
                             value={totalZoom.toLocaleString()}
                             trend={formatTrend(trends.zoom)}
-                            color="#e8f5e9"
                             trendColor={getTrendColor(trends.zoom)}
                             trendLabel={getTrendLabel()}
+                            color="#e8f5e9"
                         />
-                        <StatBox 
-                            icon={<Phone size={20} color="#ff9800" />}
-                            title="CRM Calls" 
+                        <StatBox
+                            icon={<Phone size={20} />}
+                            title="CRM Direct Calls"
                             value={totalCrm.toLocaleString()}
                             trend={formatTrend(trends.crm)}
-                            color="#fff3e0"
                             trendColor={getTrendColor(trends.crm)}
                             trendLabel={getTrendLabel()}
+                            color="#fff3e0"
                         />
-                        <StatBox 
-                            icon={<DollarSign size={20} color="#9c27b0" />}
-                            title="Total Sales" 
+                        <StatBox
+                            icon={<DollarSign size={20} />}
+                            title="Sales Made"
                             value={totalSales.toLocaleString()}
                             trend={formatTrend(trends.sales)}
-                            color="#f3e5f5"
                             trendColor={getTrendColor(trends.sales)}
                             trendLabel={getTrendLabel()}
+                            color="#f3e5f5"
                         />
                     </Stack>
                 </Grid>
@@ -140,17 +141,17 @@ export default function AnalyticsOverview({ data = null, zoomAnalytics = null })
                 <Grid item xs={12} md={9}>
                     <Box sx={{ width: '100%', height: 350 }}>
                         <LineChart
-                            xAxis={[{ data: dates, scaleType: 'point' }]}
                             series={[
-                                { data: totalCalls, area: false, label: 'Total Calls', color: '#1976d2', curve: 'natural' },
-                                { data: zoomCalls, area: false, label: 'Zoom Calls', color: '#4caf50', curve: 'natural' },
-                                { data: crmCalls, area: false, label: 'CRM Calls', color: '#ff9800', curve: 'natural' },
+                                { data: totalCalls, label: 'Total Calls', color: '#1976d2', showMark: false, curve: 'linear' },
+                                { data: zoomCalls, label: 'Zoom Calls', color: '#4caf50', showMark: false, curve: 'linear' },
+                                { data: crmCalls, label: 'CRM Calls', color: '#ff9800', showMark: false, curve: 'linear' },
                             ]}
-                            margin={{ top: 20, bottom: 30, left: 50, right: 30 }}
-                            slotProps={{ 
-                                legend: { 
+                            xAxis={[{ scaleType: 'point', data: dates }]}
+                            margin={{ top: 20, bottom: 30, left: 40, right: 20 }}
+                            slotProps={{
+                                legend: {
                                     hidden: true
-                                } 
+                                }
                             }}
                         />
                     </Box>
@@ -167,6 +168,17 @@ export default function AnalyticsOverview({ data = null, zoomAnalytics = null })
                     <ZoomCallCharts analytics={zoomAnalytics} />
                 </Box>
             )}
+
+            {zoomMeetingAnalytics && (
+                <Box sx={{ mt: 4, pt: 4, borderTop: '1px solid #eee' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                        <Video size={24} color="#1976d2" />
+                        <Typography variant="h6" fontWeight="bold">Zoom Meeting Logs Analytics</Typography>
+                    </Box>
+                    <ZoomMeetingAnalytics analytics={zoomMeetingAnalytics} />
+                </Box>
+            )}
+
             <CustomDateRangeDialog
                 open={openDialog}
                 onClose={() => setOpenDialog(false)}
@@ -190,7 +202,7 @@ const CustomDateRangeDialog = ({ open, onClose, dateRange, setDateRange }) => {
             analytics_filter: 'custom',
             analytics_start: formatDate(dateRange[0].toISOString(), "yyyy-MM-dd"),
             analytics_end: formatDate(dateRange[1].toISOString(), "yyyy-MM-dd")
-        }, "/dashboard", { only: ['analyticsOverview', 'zoomAnalytics'] });
+        }, "/dashboard", { only: ['analyticsOverview', 'zoomAnalytics', 'zoomMeetingAnalytics'] });
         onClose();
     };
 
@@ -238,23 +250,23 @@ const CustomDateRangeDialog = ({ open, onClose, dateRange, setDateRange }) => {
 
 function StatBox({ icon, title, value, trend, color, trendColor, trendLabel }) {
     return (
-        <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            p: 2, 
-            borderRadius: 3, 
+        <Box sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            p: 2,
+            borderRadius: 3,
             border: '1px solid #eee',
             bgcolor: 'white'
         }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box sx={{ 
-                    bgcolor: color, 
-                    p: 1.5, 
-                    borderRadius: 2, 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center' 
+                <Box sx={{
+                    bgcolor: color,
+                    p: 1.5,
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                 }}>
                     {icon}
                 </Box>

@@ -72,8 +72,8 @@ const ZoomCallDateFilter = ({ startDateParam, endDateParam }) => {
         const start_date = format(new Date(dateRange[0]), "yyyy-MM-dd");
         const end_date = format(new Date(dateRange[1]), "yyyy-MM-dd");
 
-        // Use the hook to update the URL parameters and trigger an Inertia reload
-        useUpdateSearchParam({ start_date, end_date }, "/zoom-calllogs");
+        // Use the hook to update the URL parameters and trigger an Inertia reload on the current page
+        useUpdateSearchParam({ start_date, end_date }, window.location.pathname);
         handleClose();
     };
 

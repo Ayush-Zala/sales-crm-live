@@ -51,7 +51,7 @@ import ZoomCallCharts from "./ZoomCallLogs/ZoomCallCharts";
 import { hasRole } from "@/utils/AccessManager";
 import { ShoppingCart, Users, UserX, Activity, CalendarX } from "lucide-react";
 
-export default function Dashboard({ auth, detail, reportData, analyticsOverview, zoomAnalytics }) {
+export default function Dashboard({ auth, detail, reportData, analyticsOverview, zoomAnalytics, zoomMeetingAnalytics }) {
     const { roles } = auth;
 
     const isAdminOrManager =
@@ -115,7 +115,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview,
             }
 
             router.reload({ 
-                only: ['analyticsOverview', 'zoomAnalytics'], 
+                only: ['analyticsOverview', 'zoomAnalytics', 'zoomMeetingAnalytics'],
                 preserveScroll: true, 
                 preserveState: true,
                 onFinish: () => {
@@ -269,7 +269,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview,
 
                         {analyticsOverview && (
                             <Grid item xs={12}>
-                                <AnalyticsOverview data={analyticsOverview} zoomAnalytics={zoomAnalytics} />
+                                <AnalyticsOverview data={analyticsOverview} zoomAnalytics={zoomAnalytics} zoomMeetingAnalytics={zoomMeetingAnalytics} />
                             </Grid>
                         )}
 

@@ -782,10 +782,17 @@ class DashboardController extends Controller
             return \App\Services\ZoomAnalyticsService::getAnalytics($analyticsStart, $analyticsEnd);
         };
 
+        $zoomMeetingAnalyticsClosure = function () use ($request) {
+            $analyticsFilter = $request->analytics_filter ?? 'this_month';
+            list($analyticsStart, $analyticsEnd, $analyticsPrevStart, $analyticsPrevEnd) = $this->getAnalyticsDateRangeForFilter($analyticsFilter, $request);
+            return \App\Services\ZoomAnalyticsService::getMeetingAnalytics($analyticsStart, $analyticsEnd);
+        };
+
         return Inertia::render('Dashboard', [
             'detail' => fn () => $detailClosure(),
             'analyticsOverview' => fn () => $analyticsOverviewClosure(),
             'zoomAnalytics' => fn () => $zoomAnalyticsClosure(),
+            'zoomMeetingAnalytics' => fn () => $zoomMeetingAnalyticsClosure(),
             'reportData' => function () use ($request, $id, $rolesarr) {
                 if (($rolesarr->contains('Admin')) || $rolesarr->contains('Business Development Manager')) {
                     $managersList = \App\Models\User::select('users.reporting_authority_id', 'managers.name as manager_name')
