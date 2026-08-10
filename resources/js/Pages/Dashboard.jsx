@@ -49,7 +49,7 @@ import AnalyticsOverview from "./DashboardComponents/AnalyticsOverview";
 import ZoomCallAnalytics from "./ZoomCallLogs/ZoomCallAnalytics";
 import ZoomCallCharts from "./ZoomCallLogs/ZoomCallCharts";
 import { hasRole } from "@/utils/AccessManager";
-import { ShoppingCart, Users, UserX, Activity, CalendarX } from "lucide-react";
+import { ShoppingCart, Users, UserX, Activity, CalendarX, Video } from "lucide-react";
 
 export default function Dashboard({ auth, detail, reportData, analyticsOverview, zoomAnalytics, zoomMeetingAnalytics }) {
     const { roles } = auth;
