@@ -39,6 +39,13 @@ Route::middleware(['web', 'auth', 'can:Can Import Retention'])->group(function (
     Route::get('/retention-import/{id}',  [RetentionImportController::class, 'status']);
 });
 
+use App\Http\Controllers\ZoomSyncController;
+
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::post('/zoom-sync',      [ZoomSyncController::class, 'trigger']);
+    Route::get('/zoom-sync/{id}',  [ZoomSyncController::class, 'status']);
+});
+
 /*
 Route::controller(DashboardController::class)
     ->middleware(['web', 'auth', 'verified'])

@@ -12,6 +12,7 @@ import ZoomCallAnalytics from "./ZoomCallAnalytics";
 import ZoomCallDateFilter from "./ZoomCallDateFilter";
 import ZoomCallCharts from "./ZoomCallCharts";
 import ZoomCallAdvancedCharts from "./ZoomCallAdvancedCharts";
+import ZoomSyncButton from "./ZoomSyncButton";
 
 const Index = ({ auth, zoomCallLogs, users, analytics }) => {
     const page = usePage();
@@ -82,6 +83,7 @@ const Index = ({ auth, zoomCallLogs, users, analytics }) => {
             <MainContentTemplate
                 title={"Zoom Call Logs"}
                 subtitle={"View all zoom call logs"}
+                buttonComponent={<ZoomSyncButton auth={auth} type="call_logs" />}
             >
                 <Grid
                     container

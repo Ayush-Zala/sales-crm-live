@@ -684,7 +684,7 @@ class ZoomController extends Controller
         return $responseData;
     }
 
-    public function getCallList()
+    public function getCallList($startDate = null, $endDate = null)
     {
 
         $userlist = $this->getZoomAdminUser();
@@ -698,73 +698,85 @@ class ZoomController extends Controller
         // Use the user's email as the Zoom user ID (original code used hardcoded email)
         $zoomUserId = $userlist->email;
         $url = 'https://api.zoom.us/v2/phone/users/' . $zoomUserId . '/call_history';
-        $nextPageToken = '';
+        
+        $fromDate = $startDate ? date('Y-m-d', strtotime($startDate)) : date('Y-m-d');
+        $toDate = $endDate ? date('Y-m-d', strtotime($endDate . ' +1 days')) : date('Y-m-d', strtotime("+1 days"));
 
-        do {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . Session::get('zoom_token'),
-                'Content-Type' => 'application/json',
-            ])->get($url, [
-                        'page_size' => 30,
-                        'from' => date('Y-m-d'),
-                        'to' => date('Y-m-d',strtotime("+1 days")),
-                        'next_page_token' => $nextPageToken,
-                    ]);
+        $dateChunks = $this->getDateChunks($fromDate, $toDate);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                $callLogs = $data['call_logs'];
+        foreach ($dateChunks as $chunk) {
+            $nextPageToken = '';
 
-                // Save call logs to the database
-                foreach ($callLogs as $log) {
-                    $findlog = CallLog::where('call_id', $log['id'])->count();
-                    if ($findlog == 0) {
-
-                        $furl = $this->downloadurls($log['id']);
-
-                        CallLog::create([
-                            'call_id' => $log['id'],
-                            'caller_number' => isset($log['caller_did_number']) ? $log['caller_did_number'] : '',
-                            'callee_number' => isset($log['callee_did_number']) ? $log['callee_did_number'] : '',
-                            'start_time' => isset($log['start_time']) ? Carbon::parse($log['start_time'])->toDateTimeString() : NULL,
-                            'answer_time' => isset($log['answer_time']) ? Carbon::parse($log['answer_time'])->toDateTimeString() : NULL,
-                            'end_time' => isset($log['end_time']) ? Carbon::parse($log['end_time'])->toDateTimeString() : NULL,
-                            'direction' => isset($log['direction']) ? $log['direction'] : '',
-                            'department' => isset($log['department']) ? $log['department'] : '',
-                            'caller_name' => isset($log['caller_name']) ? $log['caller_name'] : '',
-                            'caller_email' => isset($log['caller_email']) ? $log['caller_email'] : '',
-                            'result' => isset($log['result']) ? $log['result'] : '',
-                            'international' => isset($log['international']) ? $log['international'] : '',
-                            'event' => isset($log['event']) ? $log['event'] : '',
-                            'caller_ext_number' => isset($log['caller_ext_number']) ? $log['caller_ext_number'] : '',
-                            'caller_ext_type' => isset($log['caller_ext_type']) ? $log['caller_ext_type'] : '',
-                            'caller_number_type' => isset($log['caller_number_type']) ? $log['caller_number_type'] : '',
-                            'caller_device_type' => isset($log['caller_device_type']) ? $log['caller_device_type'] : '',
-                            'group_id' => isset($log['group_id']) ? $log['group_id'] : '',
-                            'recording_id' => isset($log['recording_id']) ? $log['recording_id'] : '',
-                            'recording_type' => isset($log['recording_type']) ? $log['recording_type'] : '',
-                            'talk_time' => isset($log['talk_time']) ? $log['talk_time'] : '',
-                            'hold_time' => isset($log['hold_time']) ? $log['hold_time'] : '',
-                            'wait_time' => isset($log['wait_time']) ? $log['wait_time'] : '',
-                            'calle_name' => isset($log['callee_name']) ? $log['callee_name'] : '',
-                            'calle_email' => isset($log['callee_email']) ? $log['callee_email'] : '',
-                            'ai_call_summary_id' => isset($log['ai_call_summary_id']) ? $log['ai_call_summary_id'] : '',
-                            'operator_name' => isset($log['operator_name']) ? $log['operator_name'] : '',
-                            'operator_ext_number' => isset($log['operator_ext_number']) ? $log['operator_ext_number'] : '',
-                            'operator_ext_Type' => isset($log['operator_ext_Type']) ? $log['operator_ext_Type'] : '',
-                            'operator_ext_id' => isset($log['operator_ext_id']) ? $log['operator_ext_id'] : '',
-                            'user_id' => $userlist->id,
-                            'file_url' => $furl->original['file_url'],
-                            'download_url' => $furl->original['download_url'],
+            do {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . Session::get('zoom_token'),
+                    'Content-Type' => 'application/json',
+                ])->get($url, [
+                            'page_size' => 30,
+                            'from' => $chunk['from'],
+                            'to' => $chunk['to'],
+                            'next_page_token' => $nextPageToken,
                         ]);
-                    }
-                }
 
-                $nextPageToken = $data['next_page_token'] ?? '';
-            } else {
-                return response()->json(['error' => 'Failed to fetch call logs'], 500);
-            }
-        } while (!empty($nextPageToken));
+                if ($response->successful()) {
+                    $data = $response->json();
+                    
+                    if (isset($data['call_logs'])) {
+                        $callLogs = $data['call_logs'];
+
+                        // Save call logs to the database
+                        foreach ($callLogs as $log) {
+                            $findlog = CallLog::where('call_id', $log['id'])->count();
+                            if ($findlog == 0) {
+
+                                $furl = $this->downloadurls($log['id']);
+
+                                CallLog::create([
+                                    'call_id' => $log['id'],
+                                    'caller_number' => isset($log['caller_did_number']) ? $log['caller_did_number'] : '',
+                                    'callee_number' => isset($log['callee_did_number']) ? $log['callee_did_number'] : '',
+                                    'start_time' => isset($log['start_time']) ? Carbon::parse($log['start_time'])->toDateTimeString() : NULL,
+                                    'answer_time' => isset($log['answer_time']) ? Carbon::parse($log['answer_time'])->toDateTimeString() : NULL,
+                                    'end_time' => isset($log['end_time']) ? Carbon::parse($log['end_time'])->toDateTimeString() : NULL,
+                                    'direction' => isset($log['direction']) ? $log['direction'] : '',
+                                    'department' => isset($log['department']) ? $log['department'] : '',
+                                    'caller_name' => isset($log['caller_name']) ? $log['caller_name'] : '',
+                                    'caller_email' => isset($log['caller_email']) ? $log['caller_email'] : '',
+                                    'result' => isset($log['result']) ? $log['result'] : '',
+                                    'international' => isset($log['international']) ? $log['international'] : '',
+                                    'event' => isset($log['event']) ? $log['event'] : '',
+                                    'caller_ext_number' => isset($log['caller_ext_number']) ? $log['caller_ext_number'] : '',
+                                    'caller_ext_type' => isset($log['caller_ext_type']) ? $log['caller_ext_type'] : '',
+                                    'caller_number_type' => isset($log['caller_number_type']) ? $log['caller_number_type'] : '',
+                                    'caller_device_type' => isset($log['caller_device_type']) ? $log['caller_device_type'] : '',
+                                    'group_id' => isset($log['group_id']) ? $log['group_id'] : '',
+                                    'recording_id' => isset($log['recording_id']) ? $log['recording_id'] : '',
+                                    'recording_type' => isset($log['recording_type']) ? $log['recording_type'] : '',
+                                    'talk_time' => isset($log['talk_time']) ? $log['talk_time'] : '',
+                                    'hold_time' => isset($log['hold_time']) ? $log['hold_time'] : '',
+                                    'wait_time' => isset($log['wait_time']) ? $log['wait_time'] : '',
+                                    'calle_name' => isset($log['callee_name']) ? $log['callee_name'] : '',
+                                    'calle_email' => isset($log['callee_email']) ? $log['callee_email'] : '',
+                                    'ai_call_summary_id' => isset($log['ai_call_summary_id']) ? $log['ai_call_summary_id'] : '',
+                                    'operator_name' => isset($log['operator_name']) ? $log['operator_name'] : '',
+                                    'operator_ext_number' => isset($log['operator_ext_number']) ? $log['operator_ext_number'] : '',
+                                    'operator_ext_Type' => isset($log['operator_ext_Type']) ? $log['operator_ext_Type'] : '',
+                                    'operator_ext_id' => isset($log['operator_ext_id']) ? $log['operator_ext_id'] : '',
+                                    'user_id' => $userlist->id,
+                                    'file_url' => $furl->original['file_url'],
+                                    'download_url' => $furl->original['download_url'],
+                                ]);
+                            }
+                        }
+                    }
+
+                    $nextPageToken = $data['next_page_token'] ?? '';
+                } else {
+                    \Illuminate\Support\Facades\Log::error('Failed to fetch call logs', ['response' => $response->body()]);
+                    $nextPageToken = '';
+                }
+            } while (!empty($nextPageToken));
+        }
 
     }
 
@@ -905,7 +917,7 @@ class ZoomController extends Controller
         // echo Session::get('zoom_token');
     }
 
-    public function getMeetingList()
+    public function getMeetingList($startDate = null, $endDate = null)
     {
 
         $userlist = $this->getZoomAdminUser();
@@ -914,133 +926,160 @@ class ZoomController extends Controller
         }
         $this->tokenGenerate1($userlist->id);
         $userlist2 = User::where('zoom_user_id', '!=', '')->get();
+        
+        $fromDate = $startDate ? date('Y-m-d', strtotime($startDate)) : date('Y-m-01');
+        $toDate = $endDate ? date('Y-m-d', strtotime($endDate . ' +1 days')) : date('Y-m-d', strtotime("+1 days"));
+
+        $dateChunks = $this->getDateChunks($fromDate, $toDate);
 
         foreach ($userlist2 as $userss) {
             //    $this->tokenGenerate1($userss->zoom_user_id);
 
 
             $url = 'https://api.zoom.us/v2/users/' . $userss->zoom_user_id . '/recordings';
-            $nextPageToken = '';
 
-            do {
-                $response = Http::withHeaders([
-                    'Authorization' => 'Bearer ' . Session::get('zoom_token'),
-                    'Content-Type' => 'application/json',
-                ])->get($url, [
-                            'page_size' => 50,
-                            'from' => date('Y-m-01'),
-                            'to' => date('Y-m-d',strtotime("+1 days")),
-                            'next_page_token' => $nextPageToken,
-                        ]);
+            foreach ($dateChunks as $chunk) {
+                $nextPageToken = '';
 
-                if ($response->successful()) {
-                    $data = $response->json();
-
-                    $callLogs = $data['meetings'];
-
-
-                    foreach ($callLogs as $log) {
-
-                        $findlog = MeetingLog::where('meeting_id', $log['id'])->count();
-                        if ($findlog == 0) {
-                            foreach ($log['recording_files'] as $key => $file) {
-                                if (array_key_exists('recording_type', $file)) {
-                                    if ($log['recording_files'][$key]['recording_type'] == 'summary') {
-                                        $summary = json_encode($this->transcript($log['recording_files'][$key]['download_url']));
-                                    }
-
-                                    if ($log['recording_files'][$key]['recording_type'] == 'audio_transcript') {
-                                        $audiosummary = $log['recording_files'][$key]['download_url'];
-                                    }
-                                }
-                            }
-                            if (!isset($audiosummary)) {
-                                $audiosummary = "";
-                            }
-                            if (!isset($summary)) {
-                                $summary = "";
-                            }
-                            // echo $log['recording_files'][$key]['download_url'];
-                            if ($audiosummary != "") {
-                                $furl = json_encode($this->audiotranscript($audiosummary, $log['id']));
-                                $darrfurl = json_decode($furl, true);
-
-                                if (isset($darrfurl['original']['file_url'])) {
-                                    $fileUrlstorage = $darrfurl['original']['file_url'];
-
-                                } else {
-                                    $fileUrlstorage = "";
-                                }
-                            } else {
-                                $fileUrlstorage = "";
-                            }
-                            MeetingLog::create([
-                                'meeting_id' => $log['id'],
-                                'account_id' => isset($log['account_id']) ? $log['account_id'] : '',
-                                'host_id' => isset($log['host_id']) ? $log['host_id'] : '',
-                                'topic' => isset($log['topic']) ? $log['topic'] : NULL,
-                                'type' => isset($log['type']) ? $log['type'] : NULL,
-                                'start_time' => isset($log['start_time']) ? Carbon::parse($log['start_time'])->toDateTimeString() : NULL,
-                                'timezone' => isset($log['timezone']) ? $log['timezone'] : '',
-                                'duration' => isset($log['duration']) ? $log['duration'] : '',
-                                'share_url' => isset($log['share_url']) ? $log['share_url'] : '',
-                                'record_start' => isset($log['recording_start'][0]['recording_start']) ? Carbon::parse($log['recording_start'][0]['recording_start'])->toDateTimeString() : '',
-                                'record_end' => isset($log['recording_end'][0]['recording_end']) ? Carbon::parse($log['recording_end'][0]['recording_end'])->toDateTimeString() : '',
-                                'user_id' => $userss->id,
-                                'meeting_key' => isset($log['uuid']) ? $log['uuid'] : '',
-                                'participants' => json_encode($this->participants($log['id'])),
-                                'transcript' => $summary,
-                                'audio_transcript' => $audiosummary,
-                                'audio_file_script_url' => $fileUrlstorage,
-                                'recording_play_passcode' => isset($log['recording_play_passcode']) ? $log['recording_play_passcode'] : '',
+                do {
+                    $response = Http::withHeaders([
+                        'Authorization' => 'Bearer ' . Session::get('zoom_token'),
+                        'Content-Type' => 'application/json',
+                    ])->get($url, [
+                                'page_size' => 50,
+                                'from' => $chunk['from'],
+                                'to' => $chunk['to'],
+                                'next_page_token' => $nextPageToken,
                             ]);
-                        }
-                    }
 
-                    $nextPageToken = $data['next_page_token'] ?? '';
-                } else {
-                    return response()->json(['error' => 'Failed to fetch meeting  logs'], 500);
-                }
-            } while (!empty($nextPageToken));
+                    if ($response->successful()) {
+                        $data = $response->json();
+
+                        if (isset($data['meetings'])) {
+                            $callLogs = $data['meetings'];
+
+
+                            foreach ($callLogs as $log) {
+
+                                $findlog = MeetingLog::where('meeting_id', $log['id'])->count();
+                                if ($findlog == 0) {
+                                    $summary = "";
+                                    $audiosummary = "";
+                                    
+                                    if (isset($log['recording_files'])) {
+                                        foreach ($log['recording_files'] as $key => $file) {
+                                            if (array_key_exists('recording_type', $file)) {
+                                                if ($log['recording_files'][$key]['recording_type'] == 'summary') {
+                                                    $summary = json_encode($this->transcript($log['recording_files'][$key]['download_url']));
+                                                }
+
+                                                if ($log['recording_files'][$key]['recording_type'] == 'audio_transcript') {
+                                                    $audiosummary = $log['recording_files'][$key]['download_url'];
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (!isset($audiosummary)) {
+                                        $audiosummary = "";
+                                    }
+                                    if (!isset($summary)) {
+                                        $summary = "";
+                                    }
+                                    // echo $log['recording_files'][$key]['download_url'];
+                                    if ($audiosummary != "") {
+                                        $furl = json_encode($this->audiotranscript($audiosummary, $log['id']));
+                                        $darrfurl = json_decode($furl, true);
+
+                                        if (isset($darrfurl['original']['file_url'])) {
+                                            $fileUrlstorage = $darrfurl['original']['file_url'];
+
+                                        } else {
+                                            $fileUrlstorage = "";
+                                        }
+                                    } else {
+                                        $fileUrlstorage = "";
+                                    }
+                                    MeetingLog::create([
+                                        'meeting_id' => $log['id'],
+                                        'account_id' => isset($log['account_id']) ? $log['account_id'] : '',
+                                        'host_id' => isset($log['host_id']) ? $log['host_id'] : '',
+                                        'topic' => isset($log['topic']) ? $log['topic'] : NULL,
+                                        'type' => isset($log['type']) ? $log['type'] : NULL,
+                                        'start_time' => isset($log['start_time']) ? Carbon::parse($log['start_time'])->toDateTimeString() : NULL,
+                                        'timezone' => isset($log['timezone']) ? $log['timezone'] : '',
+                                        'duration' => isset($log['duration']) ? $log['duration'] : '',
+                                        'share_url' => isset($log['share_url']) ? $log['share_url'] : '',
+                                        'record_start' => isset($log['recording_start'][0]['recording_start']) ? Carbon::parse($log['recording_start'][0]['recording_start'])->toDateTimeString() : '',
+                                        'record_end' => isset($log['recording_end'][0]['recording_end']) ? Carbon::parse($log['recording_end'][0]['recording_end'])->toDateTimeString() : '',
+                                        'user_id' => $userss->id,
+                                        'meeting_key' => isset($log['uuid']) ? $log['uuid'] : '',
+                                        'participants' => json_encode($this->participants($log['id'])),
+                                        'transcript' => $summary,
+                                        'audio_transcript' => $audiosummary,
+                                        'audio_file_script_url' => $fileUrlstorage,
+                                        'recording_play_passcode' => isset($log['recording_play_passcode']) ? $log['recording_play_passcode'] : '',
+                                    ]);
+                                }
+                            }
+                        }
+
+                        $nextPageToken = $data['next_page_token'] ?? '';
+                    } else {
+                        \Illuminate\Support\Facades\Log::error('Failed to fetch meeting logs', ['response' => $response->body()]);
+                        $nextPageToken = '';
+                    }
+                } while (!empty($nextPageToken));
+            }
         }
 
     }
-    public function getRecId()
+    public function getRecId($startDate = null, $endDate = null)
     {
+        ini_set('memory_limit', '1024M');
 
         $userlist = $this->getZoomAdminUser();
         if (!$userlist) {
             return response()->json(['error' => 'No Zoom admin user found'], 500);
         }
         $this->tokenGenerate1($userlist->id);
-        $call_log = CallLog::where('recording_id', '=', '')->orderBy('id', 'desc')->get();
-        foreach ($call_log as $log) {
-            $url = 'https://api.zoom.us/v2/phone/call_logs/' . $log->call_id;
-            $nextPageToken = '';
-
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . Session::get('zoom_token'),
-                'Content-Type' => 'application/json',
-            ])->get($url, [
-                        'page_size' => 2000,
-                        'page_number' => 1,
-                        'status' => 'active'
-                        // 'from' => '2024-07-01',
-                        // 'to' => '2025-08-10',
-                        // 'next_page_token' => $nextPageToken,
-                    ]);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                $clog = CallLog::where('call_id', $log->call_id)->first();
-                $clog->recording_id = $data['recording_id'] ?? '';
-                $clog->save();
-
-            }
+        
+        $query = CallLog::where('recording_id', '=', '');
+        
+        if ($startDate) {
+            $query->where('start_time', '>=', date('Y-m-d 00:00:00', strtotime($startDate)));
+        } else {
+            // Default to last 7 days if no start date is provided
+            $query->where('start_time', '>=', Carbon::now()->subDays(7));
+        }
+        
+        if ($endDate) {
+            $query->where('start_time', '<=', date('Y-m-d 23:59:59', strtotime($endDate)));
         }
 
+        $query->orderBy('id', 'desc')->chunk(200, function($call_log) {
+            foreach ($call_log as $log) {
+                $url = 'https://api.zoom.us/v2/phone/call_logs/' . $log->call_id;
 
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . Session::get('zoom_token'),
+                    'Content-Type' => 'application/json',
+                ])->get($url, [
+                    'page_size' => 2000,
+                    'page_number' => 1,
+                    'status' => 'active'
+                ]);
 
+                if ($response->successful()) {
+                    $data = $response->json();
+                    $clog = CallLog::where('call_id', $log->call_id)->first();
+                    if ($clog) {
+                        // If there is no recording, set to 'NONE' to prevent checking again
+                        $clog->recording_id = !empty($data['recording_id']) ? $data['recording_id'] : 'NONE';
+                        $clog->save();
+                    }
+                }
+            }
+        });
     }
 
     public function getZoomUsersList()
@@ -1361,5 +1400,33 @@ class ZoomController extends Controller
                 return response()->json(['error' => 'Failed to fetch call logs'], 500);
             }
         } while (!empty($nextPageToken));
+    }
+
+    /**
+     * Helper to break a date range into maximum 30-day chunks for Zoom API limits.
+     */
+    private function getDateChunks($startDate, $endDate)
+    {
+        $currentDate = new \DateTime($startDate);
+        $endDateObj = new \DateTime($endDate);
+        $chunks = [];
+        
+        while ($currentDate <= $endDateObj) {
+            $chunkStart = $currentDate->format("Y-m-d");
+            $chunkEndObj = clone $currentDate;
+            $chunkEndObj->modify("+30 days"); 
+            
+            if ($chunkEndObj > $endDateObj) {
+                $chunkEndObj = clone $endDateObj;
+            }
+            
+            $chunkEnd = $chunkEndObj->format("Y-m-d");
+            $chunks[] = ["from" => $chunkStart, "to" => $chunkEnd];
+            
+            $currentDate = clone $chunkEndObj;
+            $currentDate->modify("+1 day");
+        }
+        
+        return $chunks;
     }
 }

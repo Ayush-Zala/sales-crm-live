@@ -10,6 +10,7 @@ import ZoomMeetingLogDataSearch from "./ZoomMeetingLogDataSearch";
 import ZoomMeetingAnalytics from "./ZoomMeetingAnalytics";
 import ZoomMeetingThirdSection from "./ZoomMeetingThirdSection";
 import ZoomCallDateFilter from "../ZoomCallLogs/ZoomCallDateFilter";
+import ZoomSyncButton from "../ZoomCallLogs/ZoomSyncButton";
 
 const Index = ({ auth, zoomMeetings, users, analytics }) => {
     const page = usePage();
@@ -62,6 +63,7 @@ const Index = ({ auth, zoomMeetings, users, analytics }) => {
             <MainContentTemplate
                 title={"Zoom Meeting Logs"}
                 subtitle={"View all zoom meeting logs"}
+                buttonComponent={<ZoomSyncButton auth={auth} type="meetings" />}
             >
                 <Grid
                     container
