@@ -150,7 +150,7 @@ class RetentionController extends Controller
             $retentions = $retentions->where('assign_to', $user->id);
         }
 
-        $retentions = $retentions->paginate($request->per_page ?? 50);
+        $retentions = $retentions->orderBy('last_order_us_date', 'desc')->paginate($request->per_page ?? 50);
 
         $retentionData = RetentionResource::collection($retentions)->resolve();
 
