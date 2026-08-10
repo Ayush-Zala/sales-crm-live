@@ -46,10 +46,12 @@ import TargetsTableCell from "./DashboardComponents/TargetsTableCell";
 import { AssignTargetComponent } from "./DashboardComponents/dialogs/AssignTargetComponent";
 import TotalCallsMade from "./DashboardComponents/MetaCardsComponents/TotalCallsMade";
 import AnalyticsOverview from "./DashboardComponents/AnalyticsOverview";
+import ZoomCallAnalytics from "./ZoomCallLogs/ZoomCallAnalytics";
+import ZoomCallCharts from "./ZoomCallLogs/ZoomCallCharts";
 import { hasRole } from "@/utils/AccessManager";
 import { ShoppingCart, Users, UserX, Activity, CalendarX } from "lucide-react";
 
-export default function Dashboard({ auth, detail, reportData, analyticsOverview }) {
+export default function Dashboard({ auth, detail, reportData, analyticsOverview, zoomAnalytics }) {
     const { roles } = auth;
 
     const isAdminOrManager =
@@ -113,7 +115,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
             }
 
             router.reload({ 
-                only: ['analyticsOverview'], 
+                only: ['analyticsOverview', 'zoomAnalytics'], 
                 preserveScroll: true, 
                 preserveState: true,
                 onFinish: () => {
@@ -267,7 +269,7 @@ export default function Dashboard({ auth, detail, reportData, analyticsOverview 
 
                         {analyticsOverview && (
                             <Grid item xs={12}>
-                                <AnalyticsOverview data={analyticsOverview} />
+                                <AnalyticsOverview data={analyticsOverview} zoomAnalytics={zoomAnalytics} />
                             </Grid>
                         )}
 

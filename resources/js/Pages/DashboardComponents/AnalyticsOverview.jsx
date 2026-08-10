@@ -5,8 +5,10 @@ import { Video, Phone, TrendingUp, DollarSign, Activity } from 'lucide-react';
 import useUpdateSearchParam from "@/hooks/use-update-search-params";
 import { DateCalendar } from "@mui/x-date-pickers";
 import { formatDate } from "@/utils/date-time-formatters";
+import ZoomCallAnalytics from "../ZoomCallLogs/ZoomCallAnalytics";
+import ZoomCallCharts from "../ZoomCallLogs/ZoomCallCharts";
 
-export default function AnalyticsOverview({ data = null }) {
+export default function AnalyticsOverview({ data = null, zoomAnalytics = null }) {
     const [openDialog, setOpenDialog] = useState(false);
     const [dateRange, setDateRange] = useState([null, null]);
     
@@ -19,7 +21,7 @@ export default function AnalyticsOverview({ data = null }) {
         if (val === 'custom') {
             setOpenDialog(true);
         } else {
-            useUpdateSearchParam({ analytics_filter: val }, "/dashboard", { only: ['analyticsOverview'] });
+            useUpdateSearchParam({ analytics_filter: val }, "/dashboard", { only: ['analyticsOverview', 'zoomAnalytics'] });
         }
     };
     if (!data || !data.dailyData || data.dailyData.length === 0) return null;
@@ -154,6 +156,17 @@ export default function AnalyticsOverview({ data = null }) {
                     </Box>
                 </Grid>
             </Grid>
+
+            {zoomAnalytics && (
+                <Box sx={{ mt: 4, pt: 4, borderTop: '1px solid #eee' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                        <Phone size={24} color="#ff9800" />
+                        <Typography variant="h6" fontWeight="bold">Zoom Phone Call Logs Analytics</Typography>
+                    </Box>
+                    <ZoomCallAnalytics analytics={zoomAnalytics} />
+                    <ZoomCallCharts analytics={zoomAnalytics} />
+                </Box>
+            )}
             <CustomDateRangeDialog
                 open={openDialog}
                 onClose={() => setOpenDialog(false)}
@@ -177,7 +190,7 @@ const CustomDateRangeDialog = ({ open, onClose, dateRange, setDateRange }) => {
             analytics_filter: 'custom',
             analytics_start: formatDate(dateRange[0].toISOString(), "yyyy-MM-dd"),
             analytics_end: formatDate(dateRange[1].toISOString(), "yyyy-MM-dd")
-        }, "/dashboard", { only: ['analyticsOverview'] });
+        }, "/dashboard", { only: ['analyticsOverview', 'zoomAnalytics'] });
         onClose();
     };
 
