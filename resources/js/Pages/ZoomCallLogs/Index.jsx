@@ -8,8 +8,12 @@ import ZoomCallLogsCellComponent from "./ZoomCallLogsCellComponent";
 import ZoomCallFilter from "./ZoomCallFilter";
 import ZoomUserSearchFilter from "./ZoomUserSearchFilter";
 import ZoomCallLogDataSearch from "./ZoomCallLogDataSearch";
+import ZoomCallAnalytics from "./ZoomCallAnalytics";
+import ZoomCallDateFilter from "./ZoomCallDateFilter";
+import ZoomCallCharts from "./ZoomCallCharts";
+import ZoomCallAdvancedCharts from "./ZoomCallAdvancedCharts";
 
-const Index = ({ auth, zoomCallLogs, users }) => {
+const Index = ({ auth, zoomCallLogs, users, analytics }) => {
     const page = usePage();
     const params = extractUrlParams(page.url);
 
@@ -91,6 +95,9 @@ const Index = ({ auth, zoomCallLogs, users }) => {
                     }}
                 >
                     <Grid item>
+                        <ZoomCallDateFilter startDateParam={params.start_date} endDateParam={params.end_date} />
+                    </Grid>
+                    <Grid item>
                         <ZoomCallFilter filter={params.filter} />
                     </Grid>
                     <Grid item xs={2}>
@@ -102,6 +109,15 @@ const Index = ({ auth, zoomCallLogs, users }) => {
                     <Grid item xs={3}>
                         <ZoomCallLogDataSearch search={params.search} />
                     </Grid>
+                </Grid>
+                <Grid item xs={12} mt={3}>
+                    <ZoomCallAnalytics analytics={analytics} />
+                </Grid>
+                <Grid item xs={12}>
+                    <ZoomCallCharts analytics={analytics} />
+                </Grid>
+                <Grid item xs={12}>
+                    <ZoomCallAdvancedCharts analytics={analytics} />
                 </Grid>
                 <Grid item xs={12}>
                     <PaginatedTable
