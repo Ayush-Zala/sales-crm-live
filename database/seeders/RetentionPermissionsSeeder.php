@@ -35,8 +35,11 @@ class RetentionPermissionsSeeder extends Seeder
         // 4. Create or get "Can Edit Retention Assign User" permission
         $canAssignRetention = Permission::firstOrCreate(['name' => 'Can Edit Retention Assign User', 'guard_name' => 'web']);
 
+        // 4b. Create or get "Can Import Retention" permission
+        $canImportRetention = Permission::firstOrCreate(['name' => 'Can Import Retention', 'guard_name' => 'web']);
+
         // 5. Map permissions to the Retention group
-        $permissionsToMap = [$canViewRetention->id, $canAssignRetention->id];
+        $permissionsToMap = [$canViewRetention->id, $canAssignRetention->id, $canImportRetention->id];
         foreach ($permissionsToMap as $permissionId) {
             $exists = DB::table('group_has_permissions')
                 ->where('group_id', $retentionGroup->id)
@@ -74,6 +77,17 @@ class RetentionPermissionsSeeder extends Seeder
             } else {
                 if ($role->hasPermissionTo('Can Edit Retention Assign User')) {
                     $role->revokePermissionTo('Can Edit Retention Assign User');
+                }
+            }
+
+            // 8. Ensure "Can Import Retention" is only on Admin
+            if ($role->name === 'Admin') {
+                if (!$role->hasPermissionTo('Can Import Retention')) {
+                    $role->givePermissionTo('Can Import Retention');
+                }
+            } else {
+                if ($role->hasPermissionTo('Can Import Retention')) {
+                    $role->revokePermissionTo('Can Import Retention');
                 }
             }
         }

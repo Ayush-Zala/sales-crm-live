@@ -80,6 +80,24 @@ return [
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
+        
+        'patterns' => [
+            'driver'    => 'mysql',
+            'host'      => env('SOURCE_DB_HOST', '192.168.0.71'),
+            'port'      => env('SOURCE_DB_PORT', '3306'),
+            'database'  => env('SOURCE_DB_DATABASE', 'patterns247_db'),
+            'username'  => env('SOURCE_DB_USERNAME'),
+            'password'  => env('SOURCE_DB_PASSWORD'),
+            'charset'   => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix'    => '',
+            'strict'    => false,
+            'engine'    => null,
+            'options'   => [
+                PDO::ATTR_TIMEOUT => 15,
+            ],
+        ],
+
         'mariadb' => [
             'driver' => 'mariadb',
             'url' => env('DB_URL'),

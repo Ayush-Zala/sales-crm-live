@@ -32,6 +32,13 @@ use App\Http\Controllers\TargetController;
 use App\Http\Controllers\RetentionController;
 use App\Http\Controllers\ReportController;
 
+use App\Http\Controllers\RetentionImportController;
+
+Route::middleware(['web', 'auth', 'can:Can Import Retention'])->group(function () {
+    Route::post('/retention-import',      [RetentionImportController::class, 'trigger']);
+    Route::get('/retention-import/{id}',  [RetentionImportController::class, 'status']);
+});
+
 /*
 Route::controller(DashboardController::class)
     ->middleware(['web', 'auth', 'verified'])

@@ -1,5 +1,8 @@
 import { Head } from "@inertiajs/react";
-import { Grid } from "@mui/material";
+import React, { useState } from "react";
+import axios from "axios";
+import { Grid, TextField, IconButton, CircularProgress, Tooltip, Snackbar, Alert } from "@mui/material";
+import SyncIcon from "@mui/icons-material/Sync";
 
 import SelectPaginatedTable from "@/Components/SelectPaginatedTable";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
@@ -15,6 +18,55 @@ import LeadUserListFilterComponent from "./LeadUserListFilterComponent";
 
 const index = ({ auth, leadsData, users, dispositions }) => {
     const { current_page, per_page, total, last_page, data: rows } = leadsData;
+    
+    const [syncMonths, setSyncMonths] = useState(6);
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [snackbarMsg, setSnackbarMsg] = useState({ open: false, message: "", severity: "success" });
+
+    const handleSnackbarClose = () => setSnackbarMsg({ ...snackbarMsg, open: false });
+
+    const runRetentionImport = async () => {
+        setIsSyncing(true);
+        try {
+            const response = await axios.post(`/api/retention-import?months=${syncMonths}`);
+            
+            const { id } = response.data;
+
+            const poll = setInterval(async () => {
+                try {
+                    const res = await axios.get(`/api/retention-import/${id}`);
+                    const log = res.data;
+                    
+                    if (log.status === "completed") {
+                        clearInterval(poll);
+                        setIsSyncing(false);
+                        setSnackbarMsg({ 
+                            open: true, 
+                            message: `Sync completed! Updated ${log.summary.companies_updated} companies.`, 
+                            severity: "success" 
+                        });
+                        // Could trigger a reload here if wanted: window.location.reload();
+                    } else if (log.status === "failed") {
+                        clearInterval(poll);
+                        setIsSyncing(false);
+                        setSnackbarMsg({ open: true, message: "Import failed: " + log.error, severity: "error" });
+                    }
+                } catch (pollErr) {
+                    clearInterval(poll);
+                    setIsSyncing(false);
+                    setSnackbarMsg({ open: true, message: "Error checking status.", severity: "error" });
+                }
+            }, 2000);
+        } catch (error) {
+            console.error(error);
+            if (error.response && error.response.status === 409) {
+                setSnackbarMsg({ open: true, message: "An import is already running.", severity: "warning" });
+            } else {
+                setSnackbarMsg({ open: true, message: "Error triggering sync.", severity: "error" });
+            }
+            setIsSyncing(false);
+        }
+    };
 
     const { selection, setSelection } = useLeadsSelectionStore();
 
@@ -32,6 +84,11 @@ const index = ({ auth, leadsData, users, dispositions }) => {
     const hasAssignPermission = hasPermission(
         auth,
         "Can Edit Retention Assign User"
+    );
+
+    const hasSyncPermission = hasPermission(
+        auth,
+        "Can Import Retention"
     );
 
 
@@ -92,8 +149,34 @@ const index = ({ auth, leadsData, users, dispositions }) => {
             <MainContentTemplate
                 title="Retention"
                 subtitle="View Retention list here"
-                button=""
-                href=""
+                buttonComponent={
+                    hasSyncPermission && (
+                        <Grid item display="flex" alignItems="center" gap={1}>
+                            <TextField
+                                type="number"
+                                size="small"
+                                label="Months"
+                                variant="outlined"
+                                value={syncMonths}
+                                onChange={(e) => setSyncMonths(e.target.value)}
+                                disabled={isSyncing}
+                                inputProps={{ min: 1 }}
+                                sx={{ width: '80px' }}
+                            />
+                            <Tooltip title="Sync Retention Data">
+                                <span>
+                                    <IconButton 
+                                        color="primary" 
+                                        onClick={runRetentionImport} 
+                                        disabled={isSyncing}
+                                    >
+                                        {isSyncing ? <CircularProgress size={24} /> : <SyncIcon />}
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </Grid>
+                    )
+                }
             >
                 <Grid
                     container
@@ -147,6 +230,17 @@ const index = ({ auth, leadsData, users, dispositions }) => {
                     />
                 </Grid>
             </MainContentTemplate>
+
+            <Snackbar 
+                open={snackbarMsg.open} 
+                autoHideDuration={6000} 
+                onClose={handleSnackbarClose}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            >
+                <Alert onClose={handleSnackbarClose} severity={snackbarMsg.severity} sx={{ width: '100%' }}>
+                    {snackbarMsg.message}
+                </Alert>
+            </Snackbar>
         </AuthenticatedLayout>
     );
 };
