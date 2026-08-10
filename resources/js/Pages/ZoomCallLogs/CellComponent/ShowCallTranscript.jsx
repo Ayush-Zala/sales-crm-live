@@ -1,4 +1,4 @@
-import { PhoneInTalkRounded } from "@mui/icons-material";
+import { DescriptionRounded } from "@mui/icons-material";
 import {
     Button,
     CircularProgress,
@@ -61,7 +61,7 @@ const ShowCallTranscript = ({ recordingId, callId }) => {
                     <CircularProgress size={18} color="primary" />
                 ) : (
                     <IconButton onClick={handleClick}>
-                        <PhoneInTalkRounded color="primary" />
+                        <DescriptionRounded color="primary" />
                     </IconButton>
                 )
             ) : (
